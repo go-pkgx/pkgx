@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        goos: [linux, darwin]
+        goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
         include:
           - goos: linux
@@ -38,9 +38,93 @@ jobs:
         with:
           go-version: stable
       # A CGO_ENABLED=0 build must be fully static on every 64-bit target,
-      # so pkgm can ship on a `FROM scratch` image for each arch.
+      # so pkgx can ship on a `FROM scratch` image (or, on windows, a lone .exe).
       - env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: go build -ldflags='-s -w' -o pkgx-${{ matrix.goos }}-${{ matrix.goarch }} .
+
+  # Proof-of-concept: build pkgx.exe natively on a real Windows runner, fabricate
+  # a tiny Windows pkgx bottle (a PE built by the runner's Go toolchain, laid out
+  # as <project>/windows/x86-64/{versions.txt,v1.0.0.tar.gz}), serve dist/ over
+  # HTTP, and prove `pkgx.exe <project>` fetches the bottle, resolves the .exe,
+  # execs it, and both its output AND its exit code propagate.
+  #
+  # NB: pkgx depends on github.com/go-pkgx/bottle via a tagged version; the
+  # windows run-path lives in that module. This job checks out go-pkgx/bottle
+  # alongside and `replace`s it locally, so it goes green once the windows bottle
+  # changes are on bottle's default branch (or a bumped tag pkgx requires).
+  windows-run:
+    runs-on: windows-latest
+    env:
+      GOWORK: "off"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pkgx
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build pkgx.exe (native windows/amd64)
+        working-directory: pkgx
+        env:
+          CGO_ENABLED: "0"
+        run: go build -o pkgx.exe .
+
+      - name: Fabricate a tiny windows bottle (hello.exe)
+        shell: pwsh
+        working-directory: pkgx
+        run: |
+          $proj = "hello.test"; $ver = "1.0.0"; $slug = "x86-64"
+          New-Item -ItemType Directory -Force -Path hello | Out-Null
+          @'
+          package main
+          import ("fmt"; "os")
+          func main() {
+              if len(os.Args) > 1 && os.Args[1] == "fail" { os.Exit(3) }
+              fmt.Println("hello from pkgx bottle (win)")
+          }
+          '@ | Set-Content hello/hello.go
+          # Native windows PE, the leaf tool of the bottle.
+          Push-Location hello; go mod init hello.test 2>$null; go build -o hello.exe .; Pop-Location
+          # Bottle tree: <proj>/v<ver>/bin/hello.exe  ->  gzip'd tar.
+          $stage = "stage/$proj/v$ver/bin"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item hello/hello.exe "$stage/hello.exe"
+          $dist = "dist/$proj/windows/$slug"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          # bsdtar ships on windows-latest and supports -z for gzip.
+          tar -c -z -f "$dist/v$ver.tar.gz" -C stage "$proj/v$ver"
+          Set-Content "$dist/versions.txt" $ver
+          # package.yml is served from the same root (PantryBase == DistBase).
+          New-Item -ItemType Directory -Force -Path "dist/$proj" | Out-Null
+          Set-Content "dist/$proj/package.yml" "provides:`n  - bin/hello`n"
+          Get-ChildItem -Recurse dist | Select-Object FullName
+
+      - name: Serve dist/ and run pkgx.exe
+        shell: pwsh
+        working-directory: pkgx
+        run: |
+          $srv = Start-Process python -PassThru -ArgumentList '-m','http.server','8199' -WorkingDirectory (Resolve-Path dist)
+          Start-Sleep -Seconds 3
+          $env:PKGX_DIST   = "http://127.0.0.1:8199"
+          $env:PKGX_PANTRY = "http://127.0.0.1:8199"
+          $env:PKGX_DIR    = "$PWD\store"
+          try {
+            # 1. output round-trip
+            $out = (& .\pkgx.exe hello.test 2>&1 | Out-String).Trim()
+            Write-Host "pkgx.exe hello.test => $out"
+            if ($out -notmatch 'hello from pkgx bottle \(win\)') {
+              throw "expected greeting, got: $out"
+            }
+            # 2. arg passing + exit-code propagation through execWindows
+            & .\pkgx.exe hello.test fail
+            if ($LASTEXITCODE -ne 3) {
+              throw "expected exit code 3, got $LASTEXITCODE"
+            }
+            Write-Host "PROOF PASS: output round-trip + exit-code 3 propagated"
+          } finally {
+            Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue
+          }

@@ -132,15 +132,32 @@ func exec(plus, rest []string) error {
 		return err
 	}
 
-	env := append(os.Environ(),
-		"LD_LIBRARY_PATH="+libPath,
-		"PATH="+strings.Join(binDirs, ":")+":"+os.Getenv("PATH"),
-	)
+	env := runEnv(binDirs, closure, dir, libPath)
 	return runELF(binPath, args, env, libPath, dir)
 }
 
+// runEnv builds the child environment. On linux/darwin the closure's shared
+// libraries are found via $LD_LIBRARY_PATH (and PATH carries the bin dirs). On
+// Windows there is no LD_LIBRARY_PATH: the loader resolves DLLs from the exe's
+// own directory and from PATH, so PATH must carry BOTH the bin and lib dirs,
+// joined with the OS-native list separator (";", not ":").
+func runEnv(binDirs []string, closure []bottle.Resolved, dir, libPath string) []string {
+	env := os.Environ()
+	if bottle.GOOS() == "windows" {
+		sep := string(os.PathListSeparator)
+		parts := append(append([]string{}, binDirs...), bottle.LibDirs(closure, dir)...)
+		return append(env, "PATH="+strings.Join(parts, sep)+sep+os.Getenv("PATH"))
+	}
+	return append(env,
+		"LD_LIBRARY_PATH="+libPath,
+		"PATH="+strings.Join(binDirs, ":")+":"+os.Getenv("PATH"),
+	)
+}
+
 // resolveBin finds the absolute path of the binary to exec: a project's primary
-// program (runProject set), or a named program looked up across binDirs.
+// program (runProject set), or a named program looked up across binDirs. The
+// result is passed through bottle.ResolveBinPath so a Windows lookup lands on
+// the ".exe" image.
 func resolveBin(runProject, program string, binDirs []string, closure []bottle.Resolved, dir string) (string, error) {
 	if runProject != "" {
 		_, provides, err := bottle.FetchMeta(runProject)
@@ -148,10 +165,10 @@ func resolveBin(runProject, program string, binDirs []string, closure []bottle.R
 			return "", err
 		}
 		prefix := bottle.PrefixOf(runProject, closure, dir)
-		return filepath.Join(prefix, "bin", bottle.PrimaryBin(runProject, provides)), nil
+		return bottle.ResolveBinPath(filepath.Join(prefix, "bin", bottle.PrimaryBin(runProject, provides))), nil
 	}
 	for _, d := range binDirs {
-		cand := filepath.Join(d, program)
+		cand := bottle.ResolveBinPath(filepath.Join(d, program))
 		if _, err := os.Stat(cand); err == nil {
 			return cand, nil
 		}
@@ -159,9 +176,11 @@ func resolveBin(runProject, program string, binDirs []string, closure []bottle.R
 	return "", fmt.Errorf("command not found in the requested packages: %s", program)
 }
 
-// runELF execs the target binary, arranging the pkgx glibc loader on linux so
-// it (and any children) resolve on a scratch image — the same mechanism pkgm's
-// `run` uses.
+// runELF execs the target binary. On linux it arranges the pkgx glibc loader so
+// the binary (and any children) resolve on a scratch image — the same mechanism
+// pkgm's `run` uses. On darwin and windows there is no such loader dance: the
+// binary is exec'd directly (Windows resolves its DLLs from the exe dir + PATH,
+// which runEnv has already populated).
 func runELF(binPath string, args, env []string, libPath, dir string) error {
 	if bottle.GOOS() == "linux" {
 		if loader := bottle.FindLoader(dir); loader != "" {
