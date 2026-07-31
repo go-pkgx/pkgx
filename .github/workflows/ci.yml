@@ -128,3 +128,6 @@ jobs:
           } finally {
             Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue
           }
+          # The intentional exit-3 above left $LASTEXITCODE=3; the proof passed,
+          # so end the step cleanly (else Actions fails it on the stray code).
+          exit 0
