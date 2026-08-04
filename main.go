@@ -1,7 +1,10 @@
 // Command pkgx is a dependency-free, pure-Go implementation of the pkgx
 // runtime: it runs packages on the fly, materialising each one's full
-// dependency closure from dist.pkgx.dev on demand, with no runtime deps of its
-// own (a single CGO_ENABLED=0 binary that works on a `FROM scratch` image).
+// dependency closure on demand — from the signed OCI registry
+// oci://ghcr.io/go-pkgx/packages by default, verifying each bottle's signature
+// (fail-closed) — with no runtime deps of its own (a single CGO_ENABLED=0 binary
+// that works on a `FROM scratch` image). Point PKGX_DIST at the unsigned upstream
+// (https://dist.pkgx.dev) with PKGX_VERIFY=0 for the full pantry.
 //
 // It shares its whole bottle backend — resolution, download, FROM-scratch
 // closure completion, and loader-aware exec — with pkgm via the
@@ -31,7 +34,12 @@ usage:
   pkgx -v, --version                 show version
 
 env:
-  PKGX_DIR   bottle store (default: ~/.pkgx)
+  PKGX_DIR     bottle store (default: ~/.pkgx)
+  PKGX_DIST    bottle source (default: oci://ghcr.io/go-pkgx/packages, the signed
+               registry; set https://dist.pkgx.dev for the full unsigned upstream
+               pantry — pair with PKGX_VERIFY=0)
+  PKGX_VERIFY  verify bottle signatures, fail-closed (default: on; set
+               0/false/no/off to disable)
 `
 
 func main() { os.Exit(run(os.Args[1:])) }

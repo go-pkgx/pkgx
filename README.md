@@ -39,6 +39,14 @@ git version 2.x.x
 ## Environment
 
 - `PKGX_DIR` — bottle store (default `~/.pkgx`)
+- `PKGX_DIST` — bottle source (default `oci://ghcr.io/go-pkgx/packages`, the signed
+  registry; set `https://dist.pkgx.dev` for the full unsigned upstream pantry —
+  pair with `PKGX_VERIFY=0`)
+- `PKGX_VERIFY` — verify bottle signatures, fail-closed (default on; set
+  `0`/`false`/`no`/`off` to disable)
+
+By default `pkgx <pkg>` fetches from the signed registry and verifies each
+bottle's signature before running it — no env needed.
 
 ## Design
 
