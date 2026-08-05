@@ -48,6 +48,27 @@ git version 2.x.x
 By default `pkgx <pkg>` fetches from the signed registry and verifies each
 bottle's signature before running it — no env needed.
 
+### `~/.pkgx/config.hcl2`
+
+Rather than exporting the `PKGX_*` (and OCI auth) variables every time, set
+their defaults declaratively in `~/.pkgx/config.hcl2`. It is a small
+[HCL2](https://github.com/hashicorp/hcl) file of top-level attributes; a real
+environment variable always overrides a value set here:
+
+```hcl2
+# ~/.pkgx/config.hcl2 — defaults for the go-pkgx tools.
+# A real environment variable always overrides a value set here.
+PKGX_DIST   = "oci://ghcr.io/go-pkgx/packages"  # signed registry (default)
+PKGX_VERIFY = true                               # fail-closed signature check
+# PKGX_DIR    = "/opt/pkgx"
+# PKGX_PANTRY = "https://raw.githubusercontent.com/pkgxdev/pantry/main/projects"
+# OCI_TOKEN   = "..."                            # private-registry credentials
+```
+
+Values may be strings, booleans, or numbers. A missing file is ignored; a
+malformed one is reported once on stderr and otherwise ignored (the tools fall
+back to environment variables and built-in defaults).
+
 ## Design
 
 Pure Go, cgo disabled — cross-compiles to six 64-bit targets (linux & darwin,

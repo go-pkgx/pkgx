@@ -1,9 +1,20 @@
 package main
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
+
+func TestRunConfigWarning(t *testing.T) {
+	old := configError
+	defer func() { configError = old }()
+	configError = func() error { return errors.New("bad config") }
+	// The warning is emitted to stderr; the command still runs to completion.
+	if rc := run([]string{"-v"}); rc != 0 {
+		t.Errorf("-v with config warning rc=%d", rc)
+	}
+}
 
 func TestSplitPlus(t *testing.T) {
 	cases := []struct {

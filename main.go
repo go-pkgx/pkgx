@@ -40,12 +40,23 @@ env:
                pantry — pair with PKGX_VERIFY=0)
   PKGX_VERIFY  verify bottle signatures, fail-closed (default: on; set
                0/false/no/off to disable)
+
+  ~/.pkgx/config.hcl2 sets defaults for the PKGX_* / OCI_* variables above
+  (HCL2 attributes, e.g. PKGX_DIST = "oci://ghcr.io/go-pkgx/packages"). A real
+  environment variable always overrides a value set in the file.
 `
 
 func main() { os.Exit(run(os.Args[1:])) }
 
+// configError reports a load/parse failure of ~/.pkgx/config.hcl2, if any. It
+// is a var so tests can drive the startup-warning path.
+var configError = bottle.ConfigError
+
 // run is the testable entry point; it returns the process exit code.
 func run(argv []string) int {
+	if err := configError(); err != nil {
+		fmt.Fprintln(os.Stderr, "pkgx: warning: ignoring ~/.pkgx/config.hcl2: "+err.Error())
+	}
 	if len(argv) == 0 {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
