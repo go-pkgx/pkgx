@@ -20,9 +20,11 @@ import (
 	"github.com/go-pkgx/bottle"
 )
 
-const version = "0.1.0"
+// version is reported by `pkgx --version`. It defaults to "dev" and is
+// overridden at release-build time via -ldflags "-X main.version=<tag>".
+var version = "dev"
 
-const usage = `pkgx ` + version + ` — pure-Go pkgx runtime
+var usage = `pkgx ` + version + ` — pure-Go pkgx runtime
 
 usage:
   pkgx <pkg>[@version] [arg...]      run a package's program ephemerally
