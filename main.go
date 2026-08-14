@@ -13,6 +13,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,9 +30,11 @@ var usage = `pkgx ` + version + ` — pure-Go pkgx runtime
 usage:
   pkgx <pkg>[@version] [arg...]      run a package's program ephemerally
                                      e.g. pkgx node@22 --version
-  pkgx +<pkg> [+<pkg>...] [cmd ...]  bring packages into the environment and
+  pkgx +<pkg> [+<pkg>...] cmd [...]  bring packages into the environment and
                                      run cmd with them on PATH/LD_LIBRARY_PATH
                                      e.g. pkgx +git +gnu.org/bash -- build.sh
+  pkgx +<pkg> [+<pkg>...]            print the environment those packages bring,
+                                     for eval "$(pkgx +gnu.org/make +llvm.org)"
   pkgx -h, --help                    show this help
   pkgx -v, --version                 show version
 
@@ -54,6 +57,10 @@ func main() { os.Exit(run(os.Args[1:])) }
 // is a var so tests can drive the startup-warning path.
 var configError = bottle.ConfigError
 
+// setupRootfs poses the pkgx loader at the canonical PT_INTERP path; a var so a
+// test can observe the call without writing to the host's /lib.
+var setupRootfs = bottle.SetupScratchRootfs
+
 // run is the testable entry point; it returns the process exit code.
 func run(argv []string) int {
 	if err := configError(); err != nil {
@@ -73,7 +80,7 @@ func run(argv []string) int {
 	}
 
 	plus, rest := splitPlus(argv)
-	if err := exec(plus, rest); err != nil {
+	if err := exec(plus, rest, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
 		return 1
 	}
@@ -108,7 +115,7 @@ func splitPlus(argv []string) (plus, rest []string) {
 //     primary program (its declared bin matching the project leaf).
 //   - `pkgx +a +b [cmd...]`  -> materialise a and b; run cmd resolved from
 //     their bin dirs (or, with no cmd, the primary program of the last +pkg).
-func exec(plus, rest []string) error {
+func exec(plus, rest []string, stdout io.Writer) error {
 	dir := bottle.Dir()
 
 	// The set of packages to materialise, and the program to run.
@@ -128,10 +135,9 @@ func exec(plus, rest []string) error {
 		}
 		if len(rest) > 0 {
 			program, args = rest[0], rest[1:]
-		} else {
-			// no explicit command: run the last +pkg's primary program.
-			runProject = project(plus[len(plus)-1])
 		}
+		// No command: print the environment these packages bring, the
+		// `eval "$(pkgx +a +b)"` contract (see envMode below).
 	}
 
 	// Materialise every requested package's complete FROM-scratch closure.
@@ -140,6 +146,23 @@ func exec(plus, rest []string) error {
 		return err
 	}
 	libPath := bottle.LibPath(closure, dir)
+
+	// `pkgx +a +b` with no command prints the environment those packages bring,
+	// for `eval "$(pkgx +a +b)"` — the contract bk's generated build script
+	// depends on, and the reason a build can source its toolchain without a
+	// system package manager.
+	if len(plus) > 0 && runProject == "" && program == "" {
+		// The caller is about to run the packages' own binaries (a build script
+		// after `eval "$(pkgx +deps)"`), so the loader has to be in place first:
+		// on a FROM-scratch image there is no /lib/ld-linux-* until we pose the
+		// pkgx glibc one. Best-effort — on a normal host it is already there.
+		if bottle.GOOS() == "linux" {
+			if loader := bottle.FindLoader(dir); loader != "" {
+				setupRootfs(loader, "")
+			}
+		}
+		return envMode(closure, dir, stdout)
+	}
 
 	// Every requested root's bin dir joins PATH so `program` resolves across
 	// all the packages the user brought in with +pkg.
@@ -188,6 +211,16 @@ func resolveBin(runProject, program string, binDirs []string, closure []bottle.R
 		prefix := bottle.PrefixOf(runProject, closure, dir)
 		return bottle.ResolveBinPath(filepath.Join(prefix, "bin", bottle.PrimaryBin(runProject, provides))), nil
 	}
+	// An explicit path runs as itself — `pkgx +gnu.org/glibc -- /usr/local/bin/bk`
+	// brings the packages into the environment for a program that is NOT one of
+	// them, which is how a tool gets a runtime on a FROM-scratch image.
+	if strings.ContainsRune(program, os.PathSeparator) {
+		cand := bottle.ResolveBinPath(program)
+		if _, err := os.Stat(cand); err != nil {
+			return "", fmt.Errorf("not executable: %s", program)
+		}
+		return cand, nil
+	}
 	for _, d := range binDirs {
 		cand := bottle.ResolveBinPath(filepath.Join(d, program))
 		if _, err := os.Stat(cand); err == nil {
@@ -234,3 +267,59 @@ func constraint(spec string) string {
 // spec returns the project part of a run target (alias of project, named for
 // readability at call sites that mean "the project to run").
 func spec(s string) string { return project(s) }
+
+// envMode prints the shell assignments that bring a package set into the
+// current environment — what `eval "$(pkgx +a +b)"` consumes. It covers the
+// WHOLE closure (dependencies included), so a compiler invoked afterwards finds
+// every dependency's headers, libraries and pkg-config files.
+//
+// Note lib64: a bottle built on x86-64 may install its libraries and .pc files
+// under lib64 rather than lib. Upstream pkgx only exports lib/pkgconfig, which
+// is why a linux/x86-64 build of wget could not find openssl through
+// pkg-config. Both are exported here.
+func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
+	var bin, ld, lib, cpath, pc, xdg, aclocal []string
+	for _, r := range closure {
+		p := bottle.PrefixOf(r.Project, closure, dir)
+		addDir(&bin, filepath.Join(p, "bin"))
+		for _, l := range []string{"lib", "lib64"} {
+			addDir(&ld, filepath.Join(p, l))
+			addDir(&lib, filepath.Join(p, l))
+			addDir(&pc, filepath.Join(p, l, "pkgconfig"))
+		}
+		addDir(&cpath, filepath.Join(p, "include"))
+		addDir(&xdg, filepath.Join(p, "share"))
+		addDir(&aclocal, filepath.Join(p, "share", "aclocal"))
+	}
+	for _, e := range []struct {
+		name string
+		dirs []string
+	}{
+		{"PATH", bin},
+		{"LD_LIBRARY_PATH", ld},
+		{"LIBRARY_PATH", lib},
+		{"CPATH", cpath},
+		{"PKG_CONFIG_PATH", pc},
+		{"XDG_DATA_DIRS", xdg},
+		{"ACLOCAL_PATH", aclocal},
+	} {
+		if len(e.dirs) == 0 {
+			continue
+		}
+		fmt.Fprintf(stdout, "export %s=\"%s${%s:+:$%s}\"\n", e.name, strings.Join(e.dirs, ":"), e.name, e.name)
+	}
+	return nil
+}
+
+// addDir appends a directory to a list if it exists and is not already there.
+func addDir(list *[]string, dir string) {
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return
+	}
+	for _, d := range *list {
+		if d == dir {
+			return
+		}
+	}
+	*list = append(*list, dir)
+}
