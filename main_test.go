@@ -51,6 +51,19 @@ func TestSpecParsing(t *testing.T) {
 		{"node@22", "node", "22"},
 		{"gnu.org/wget@^1.21", "gnu.org/wget", "^1.21"},
 		{"openssl.org@=3.0.0", "openssl.org", "=3.0.0"},
+		// A range operator appended straight to the project is pkgx syntax too,
+		// and it is what a pantry dependency map renders as. Reading it as part
+		// of the project name asks the registry for "…/ncurses^6" and the whole
+		// dependency environment dies with "invalid repository".
+		{"invisible-island.net/ncurses^6", "invisible-island.net/ncurses", "^6"},
+		{"cmake.org~3.30", "cmake.org", "~3.30"},
+		{"gnu.org/gmp>=6", "gnu.org/gmp", ">=6"},
+		{"llvm.org<19", "llvm.org", "<19"},
+		{"zlib.net=1.3.1", "zlib.net", "=1.3.1"},
+		// Degenerate forms: nothing before the delimiter is not a constraint,
+		// and an empty constraint pins nothing.
+		{"@22", "@22", "*"},
+		{"node@", "node", ""},
 	}
 	for _, c := range cases {
 		if p := project(c.in); p != c.proj {

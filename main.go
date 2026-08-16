@@ -248,20 +248,40 @@ func runELF(binPath string, args, env []string, libPath, dir string) error {
 	return bottle.Exec(binPath, append([]string{binPath}, args...), env)
 }
 
-// --- pkgspec parsing (project[@constraint]) --------------------------------
+// --- pkgspec parsing (project[@constraint] | project<op>version) -----------
+
+// verDelims are the characters that end a project name and begin its version
+// constraint. A pkgspec pins a version either with "@" (`gnu.org/gawk@5.3`) or
+// by appending a range operator directly to the project name (`cmake.org^3`,
+// `gnu.org/gmp>=6`) — both forms are pkgx syntax, and a pantry dependency map
+// such as `invisible-island.net/ncurses: ^6` renders as the second one. No
+// project name contains any of these characters, so the FIRST occurrence marks
+// the boundary.
+const verDelims = "@^~<>="
+
+// splitSpec cuts a pkgspec into its project and its constraint. The constraint
+// keeps its operator ("^6", ">=6") because that is what bottle's version
+// matcher consumes; the "@" form carries no operator, so it is dropped. A spec
+// with no constraint matches any version ("*").
+func splitSpec(s string) (project, constraint string) {
+	i := strings.IndexAny(s, verDelims)
+	if i <= 0 {
+		return s, "*"
+	}
+	if s[i] == '@' {
+		return s[:i], s[i+1:]
+	}
+	return s[:i], s[i:]
+}
 
 func project(spec string) string {
-	if i := strings.LastIndex(spec, "@"); i > 0 {
-		return spec[:i]
-	}
-	return spec
+	p, _ := splitSpec(spec)
+	return p
 }
 
 func constraint(spec string) string {
-	if i := strings.LastIndex(spec, "@"); i > 0 {
-		return spec[i+1:]
-	}
-	return "*"
+	_, c := splitSpec(spec)
+	return c
 }
 
 // spec returns the project part of a run target (alias of project, named for
