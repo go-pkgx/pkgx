@@ -302,9 +302,16 @@ func spec(s string) string { return project(s) }
 // is why a linux/x86-64 build of wget could not find openssl through
 // pkg-config. Both are exported here.
 func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
-	var bin, ld, lib, cpath, pc, xdg, aclocal []string
+	var bin, ld, lib, cpath, pc, xdg, aclocal, cmake []string
 	for _, r := range closure {
 		p := bottle.PrefixOf(r.Project, closure, dir)
+		// CMake's find_package searches <prefix>/{include,lib,…} for every entry
+		// of CMAKE_PREFIX_PATH. CPATH and LIBRARY_PATH mean nothing to it, so a
+		// cmake recipe's find_package(ZLIB) failed with "Could NOT find ZLIB
+		// (missing: ZLIB_LIBRARY ZLIB_INCLUDE_DIR)" even though zlib was right
+		// there in the closure — measured on facebook.com/zstd and libzip.org in
+		// a FROM-scratch builder, where there is no system zlib to fall back on.
+		addDir(&cmake, p)
 		addDir(&bin, filepath.Join(p, "bin"))
 		for _, l := range []string{"lib", "lib64"} {
 			addDir(&ld, filepath.Join(p, l))
@@ -326,6 +333,7 @@ func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
 		{"PKG_CONFIG_PATH", pc},
 		{"XDG_DATA_DIRS", xdg},
 		{"ACLOCAL_PATH", aclocal},
+		{"CMAKE_PREFIX_PATH", cmake},
 	} {
 		if len(e.dirs) == 0 {
 			continue
