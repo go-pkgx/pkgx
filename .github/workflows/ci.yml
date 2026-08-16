@@ -112,6 +112,11 @@ jobs:
           $env:PKGX_DIST   = "http://127.0.0.1:8199"
           $env:PKGX_PANTRY = "http://127.0.0.1:8199"
           $env:PKGX_DIR    = "$PWD\store"
+          # This fixture is a static-HTTP dist of UNSIGNED bottles, and the
+          # install path now enforces the fail-closed signature check (bottle#21),
+          # so it would refuse every one of them. State the posture explicitly;
+          # what this job proves is the Windows exec path, not verification.
+          $env:PKGX_VERIFY = "0"
           try {
             # 1. output round-trip
             $out = (& .\pkgx.exe hello.test 2>&1 | Out-String).Trim()
