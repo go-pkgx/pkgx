@@ -116,6 +116,7 @@ func TestEnvMode(t *testing.T) {
 	}
 	// tool.org: the classic lib layout; dep.org: the lib64 one.
 	mk(t, "tool.org", "v1.0.0", "bin")
+	mk(t, "tool.org", "v1.0.0", "sbin")
 	mk(t, "tool.org", "v1.0.0", "lib", "pkgconfig")
 	mk(t, "tool.org", "v1.0.0", "include")
 	mk(t, "tool.org", "v1.0.0", "share", "aclocal")
@@ -131,7 +132,9 @@ func TestEnvMode(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{
-		`export PATH="` + filepath.Join(dir, "tool.org/v1.0.0/bin") + `${PATH:+:$PATH}"`,
+		// bin AND sbin: a recipe calling ldconfig (glibc ships it in sbin) got a
+		// bare exit 127 without it.
+		`export PATH="` + filepath.Join(dir, "tool.org/v1.0.0/bin") + ":" + filepath.Join(dir, "tool.org/v1.0.0/sbin") + `${PATH:+:$PATH}"`,
 		filepath.Join(dir, "dep.org/v2.0.0/lib64/pkgconfig"), // the lib64 case
 		filepath.Join(dir, "tool.org/v1.0.0/lib/pkgconfig"),  // and the lib one
 		filepath.Join(dir, "tool.org/v1.0.0/include"),        // CPATH

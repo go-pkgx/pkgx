@@ -313,6 +313,12 @@ func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
 		// a FROM-scratch builder, where there is no system zlib to fall back on.
 		addDir(&cmake, p)
 		addDir(&bin, filepath.Join(p, "bin"))
+		// sbin too: a bottle puts its system tools there, and a recipe that calls
+		// one gets a bare "command not found" (exit 127) with nothing naming the
+		// missing binary. gnu.org/glibc ships sbin/ldconfig, which nlnetlabs.nl/ldns
+		// invokes at install time — measured, in a FROM-scratch builder where there
+		// is no system /sbin to fall back on.
+		addDir(&bin, filepath.Join(p, "sbin"))
 		for _, l := range []string{"lib", "lib64"} {
 			addDir(&ld, filepath.Join(p, l))
 			addDir(&lib, filepath.Join(p, l))
