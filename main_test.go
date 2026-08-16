@@ -137,6 +137,11 @@ func TestEnvMode(t *testing.T) {
 		filepath.Join(dir, "tool.org/v1.0.0/include"),        // CPATH
 		filepath.Join(dir, "tool.org/v1.0.0/share/aclocal"),  // ACLOCAL_PATH
 		"export LD_LIBRARY_PATH=", "export LIBRARY_PATH=", "export XDG_DATA_DIRS=",
+		// CMake ignores CPATH/LIBRARY_PATH entirely; find_package walks
+		// CMAKE_PREFIX_PATH, so the closure's PREFIXES have to be there or a
+		// cmake recipe cannot see a dependency that is plainly installed.
+		`export CMAKE_PREFIX_PATH="` + filepath.Join(dir, "tool.org/v1.0.0") + ":" +
+			filepath.Join(dir, "dep.org/v2.0.0") + `${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
