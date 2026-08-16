@@ -63,6 +63,10 @@ var setupRootfs = bottle.SetupScratchRootfs
 
 // run is the testable entry point; it returns the process exit code.
 func run(argv []string) int {
+	// A closure the resolver could not complete is not an error here — it is an
+	// error MUCH later, when the program starts and reports "cannot open shared
+	// object file". Print those diagnostics; bottle stays silent by default.
+	bottle.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "pkgx: "+msg) }
 	if err := configError(); err != nil {
 		fmt.Fprintln(os.Stderr, "pkgx: warning: ignoring ~/.pkgx/config.hcl2: "+err.Error())
 	}
