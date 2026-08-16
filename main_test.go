@@ -76,9 +76,16 @@ func TestSpecParsing(t *testing.T) {
 }
 
 func TestRunHelpVersion(t *testing.T) {
+	bottle.Warn = nil
 	if rc := run([]string{"--help"}); rc != 0 {
 		t.Errorf("--help rc=%d", rc)
 	}
+	// run() installs the diagnostic sink: a soname the resolver cannot provide
+	// must reach the user's stderr, not vanish until the program fails to start.
+	if bottle.Warn == nil {
+		t.Error("run() must install bottle.Warn")
+	}
+	bottle.Warn("libnope.so.9 is NEEDED but nothing provides it") // must not panic
 	if rc := run([]string{"-v"}); rc != 0 {
 		t.Errorf("-v rc=%d", rc)
 	}
