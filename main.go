@@ -325,7 +325,18 @@ func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
 			addDir(&lib, filepath.Join(p, l))
 			addDir(&pc, filepath.Join(p, l, "pkgconfig"))
 		}
-		addDir(&cpath, filepath.Join(p, "include"))
+		// A libc's headers must NEVER travel on CPATH. CPATH applies to every
+		// compiler invocation, so a bottle glibc's headers reach compilers that
+		// are using the HOST's libc — and two glibc header sets in one
+		// translation unit conflict outright:
+		//   glibc/v2.44.0/include/bits/stdint-uintn.h:27: error: conflicting
+		//   types for 'uint64_t'
+		// which is how the kernel's host tools failed. A compiler that should use
+		// a bottle libc is told so with --sysroot and -isystem, at the right
+		// priority; the library path is unaffected and stays below.
+		if r.Project != bottle.GlibcProject {
+			addDir(&cpath, filepath.Join(p, "include"))
+		}
 		addDir(&xdg, filepath.Join(p, "share"))
 		addDir(&aclocal, filepath.Join(p, "share", "aclocal"))
 	}
