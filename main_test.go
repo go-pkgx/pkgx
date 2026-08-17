@@ -280,3 +280,41 @@ func fakePantry(t *testing.T, recipes map[string]string) {
 	bottle.PantryBase, bottle.PantryOverlay = srv.URL, ""
 	t.Cleanup(func() { srv.Close(); bottle.PantryBase, bottle.PantryOverlay = old, oldOverlay })
 }
+
+// TestEnvModeKeepsLibcHeadersOffCPATH: CPATH applies to EVERY compiler
+// invocation, so a bottle glibc's headers reach compilers using the host's
+// libc, and two glibc header sets in one translation unit conflict outright —
+// "conflicting types for 'uint64_t'", which is how the kernel's host tools
+// failed. The library path is a different matter and keeps the bottle.
+func TestEnvModeKeepsLibcHeadersOffCPATH(t *testing.T) {
+	dir := t.TempDir()
+	for _, p := range [][]string{
+		{"gnu.org/glibc", "v2.44.0", "include"}, {"gnu.org/glibc", "v2.44.0", "lib"},
+		{"zlib.net", "v1.3.2", "include"},
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, p[0], p[1], p[2]), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fakePantry(t, map[string]string{})
+	closure := []bottle.Resolved{
+		{Project: "gnu.org/glibc", Version: bottle.ParseVer("2.44.0")},
+		{Project: "zlib.net", Version: bottle.ParseVer("1.3.2")},
+	}
+	var out strings.Builder
+	if err := envMode(closure, dir, &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(out.String(), "\n") {
+		if strings.HasPrefix(line, "export CPATH=") && strings.Contains(line, "glibc") {
+			t.Errorf("a libc's headers must not be on CPATH: %s", line)
+		}
+	}
+	if !strings.Contains(out.String(), filepath.Join(dir, "zlib.net/v1.3.2/include")) {
+		t.Error("every OTHER package still contributes its headers")
+	}
+	// …and the libc's libraries are still found.
+	if !strings.Contains(out.String(), filepath.Join(dir, "gnu.org/glibc/v2.44.0/lib")) {
+		t.Error("the libc's library path must be kept")
+	}
+}
