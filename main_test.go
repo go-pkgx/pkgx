@@ -2,6 +2,9 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -200,4 +203,80 @@ func TestResolveBinExplicitPath(t *testing.T) {
 	if _, err := resolveBin("", filepath.Join(dir, "absent"), nil, nil, dir); err == nil {
 		t.Fatal("want an error for a path that is not there")
 	}
+}
+
+// TestEnvModeRuntimeEnv: a package's own `runtime: env:` reaches the emitted
+// environment. help2man bundles Locale::gettext in its prefix and publishes
+// PERL5LIB; without this, help2man dies with "Can't locate Locale/gettext.pm"
+// and takes its consumer's build with it.
+func TestEnvModeRuntimeEnv(t *testing.T) {
+	dir := t.TempDir()
+	for _, p := range [][]string{{"gnu.org/help2man", "v1.49.3", "bin"}, {"plain.org", "v1.0.0", "bin"}} {
+		if err := os.MkdirAll(filepath.Join(dir, p[0], p[1], p[2]), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fakePantry(t, map[string]string{
+		"gnu.org/help2man": "runtime:\n  env:\n    PERL5LIB: \"{{prefix}}/lib/perl5:$PERL5LIB\"\nprovides:\n  - bin/help2man\n",
+		"plain.org":        "provides:\n  - bin/plain\n",
+	})
+
+	closure := []bottle.Resolved{
+		{Project: "gnu.org/help2man", Version: bottle.ParseVer("1.49.3")},
+		{Project: "plain.org", Version: bottle.ParseVer("1.0.0")},
+	}
+	var out strings.Builder
+	if err := envMode(closure, dir, &out); err != nil {
+		t.Fatal(err)
+	}
+	want := `export PERL5LIB="` + filepath.Join(dir, "gnu.org/help2man/v1.49.3") + `/lib/perl5:$PERL5LIB"`
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("missing %q in:\n%s", want, out.String())
+	}
+	// the computed paths still come first, so a package's own declaration can
+	// build on them rather than be overwritten by them
+	if strings.Index(out.String(), "export PATH=") > strings.Index(out.String(), "export PERL5LIB=") {
+		t.Error("runtime env must be emitted after the computed paths")
+	}
+}
+
+// A recipe the resolver cannot fetch must not sink the environment: the package
+// is installed and its paths are already exported.
+func TestEnvModeRuntimeEnvUnfetchable(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "ghost.org", "v9.9.9", "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakePantry(t, map[string]string{})
+	var said []string
+	bottle.Warn = func(msg string) { said = append(said, msg) }
+	defer func() { bottle.Warn = nil }()
+
+	var out strings.Builder
+	if err := envMode([]bottle.Resolved{{Project: "ghost.org", Version: bottle.ParseVer("9.9.9")}}, dir, &out); err != nil {
+		t.Fatalf("an unfetchable recipe must not fail the env: %v", err)
+	}
+	if !strings.Contains(out.String(), "export PATH=") {
+		t.Error("the computed paths must still be emitted")
+	}
+	if len(said) != 1 || !strings.Contains(said[0], "ghost.org") {
+		t.Errorf("the failure must be said, got %v", said)
+	}
+}
+
+// fakePantry serves package.yml for the given projects and points bottle at it,
+// so a test can drive recipe-reading without the network.
+func fakePantry(t *testing.T, recipes map[string]string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proj := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/"), "/package.yml")
+		if y, ok := recipes[proj]; ok {
+			fmt.Fprint(w, y)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	old, oldOverlay := bottle.PantryBase, bottle.PantryOverlay
+	bottle.PantryBase, bottle.PantryOverlay = srv.URL, ""
+	t.Cleanup(func() { srv.Close(); bottle.PantryBase, bottle.PantryOverlay = old, oldOverlay })
 }

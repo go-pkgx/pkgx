@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/go-pkgx/bottle"
@@ -346,7 +347,40 @@ func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "export %s=\"%s${%s:+:$%s}\"\n", e.name, strings.Join(e.dirs, ":"), e.name, e.name)
 	}
+	// Then each package's OWN declarations. A `runtime: env:` block is how a
+	// package states what its consumers need: gnu.org/help2man bundles the perl
+	// module Locale::gettext into its prefix and publishes PERL5LIB so it can be
+	// found. Emitted after the computed paths, in closure order, and verbatim —
+	// each value carries its own `$VAR` chain, so two packages contributing to
+	// the same variable compose instead of overwriting.
+	//
+	// A recipe we cannot fetch is not fatal: the package is installed and its
+	// paths are already exported, so the build keeps its chance. It is said out
+	// loud, though — silence would look exactly like a package declaring nothing.
+	for _, r := range closure {
+		env, err := bottle.FetchRuntimeEnv(r.Project, bottle.PrefixOf(r.Project, closure, dir), r.Version.Raw)
+		if err != nil {
+			if bottle.Warn != nil {
+				bottle.Warn(fmt.Sprintf("cannot read %s's runtime env: %v", r.Project, err))
+			}
+			continue
+		}
+		for _, k := range sortedKeys(env) {
+			fmt.Fprintf(stdout, "export %s=%q\n", k, env[k])
+		}
+	}
 	return nil
+}
+
+// sortedKeys returns a map's keys in a deterministic order, so the emitted
+// environment is byte-identical from one run to the next.
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // addDir appends a directory to a list if it exists and is not already there.
