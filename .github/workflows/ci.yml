@@ -107,8 +107,41 @@ jobs:
         shell: pwsh
         working-directory: pkgx
         run: |
-          $srv = Start-Process python -PassThru -ArgumentList '-m','http.server','8199' -WorkingDirectory (Resolve-Path dist)
-          Start-Sleep -Seconds 3
+          # Serve the fixture with Go, not `python -m http.server`. On a Windows
+          # runner `python` can resolve to the Microsoft Store app-execution
+          # alias: a stub that exits without serving and without failing loudly.
+          # That is exactly how this lane broke -- Start-Process reported no
+          # error and the port was simply never open. Go is already required
+          # here; python is not, and this is a Go project.
+          # Build the server rather than `go run` it: the cleanup below stops
+          # $srv, and `go run` would put the *launcher* there, leaving the real
+          # listener orphaned. Building also keeps compilation out of the
+          # readiness window below.
+          $serve = Join-Path $env:RUNNER_TEMP 'testserve.exe'
+          go build -o $serve .github\testserve\main.go
+          if ($LASTEXITCODE -ne 0) { throw 'failed to build the fixture server' }
+          # Pass an absolute directory: a started process does not inherit the
+          # PowerShell location.
+          $srv = Start-Process $serve -PassThru -ArgumentList '-dir',"$((Resolve-Path dist).Path)",'-addr','127.0.0.1:8199'
+          # Wait for the port to accept instead of sleeping a guessed 3 seconds.
+          # The old fixed sleep is what turned "no server at all" into a
+          # confusing "connection refused" three seconds later; a deadline says
+          # plainly which of the two happened.
+          $deadline = (Get-Date).AddSeconds(120)
+          $ready = $false
+          while ((Get-Date) -lt $deadline) {
+            try {
+              Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8199/' -TimeoutSec 2 | Out-Null
+              $ready = $true
+              break
+            } catch {
+              Start-Sleep -Milliseconds 300
+            }
+          }
+          if (-not $ready) {
+            throw 'fixture server never accepted on 127.0.0.1:8199'
+          }
+          Write-Host "fixture server is accepting on 127.0.0.1:8199"
           $env:PKGX_DIST   = "http://127.0.0.1:8199"
           $env:PKGX_PANTRY = "http://127.0.0.1:8199"
           $env:PKGX_DIR    = "$PWD\store"
