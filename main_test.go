@@ -318,3 +318,38 @@ func TestEnvModeKeepsLibcHeadersOffCPATH(t *testing.T) {
 		t.Error("the libc's library path must be kept")
 	}
 }
+
+// TestEnvModeDepPrefix: a recipe pointing at a DEPENDENCY's prefix resolves,
+// which needs the closure and not just the package's own prefix.
+//
+// rust-lang.org/cargo sets
+//
+//	CARGO_HTTP_CAINFO: ${{deps.curl.se/ca-certs.prefix}}/ssl/cert.pem
+//
+// and with FetchRuntimeEnv — which knows one package — cargo built with no CA
+// bundle at all and died fetching the crates index.
+func TestEnvModeDepPrefix(t *testing.T) {
+	dir := t.TempDir()
+	for _, p := range [][]string{{"a.org", "v1.0.0"}, {"curl.se/ca-certs", "v2026.8.13"}} {
+		if err := os.MkdirAll(filepath.Join(dir, p[0], p[1], "bin"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fakePantry(t, map[string]string{
+		"a.org":            "runtime:\n  env:\n    CAINFO: \"${{deps.curl.se/ca-certs.prefix}}/ssl/cert.pem\"\nprovides:\n  - bin/a\n",
+		"curl.se/ca-certs": "provides:\n  - bin/c\n",
+	})
+
+	closure := []bottle.Resolved{
+		{Project: "a.org", Version: bottle.ParseVer("1.0.0")},
+		{Project: "curl.se/ca-certs", Version: bottle.ParseVer("2026.8.13")},
+	}
+	var out strings.Builder
+	if err := envMode(closure, dir, &out); err != nil {
+		t.Fatal(err)
+	}
+	want := `export CAINFO="` + filepath.Join(dir, "curl.se/ca-certs/v2026.8.13") + `/ssl/cert.pem"`
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("missing %q in:\n%s", want, out.String())
+	}
+}

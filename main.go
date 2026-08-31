@@ -369,7 +369,12 @@ func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
 	// paths are already exported, so the build keeps its chance. It is said out
 	// loud, though — silence would look exactly like a package declaring nothing.
 	for _, r := range closure {
-		env, err := bottle.FetchRuntimeEnv(r.Project, bottle.PrefixOf(r.Project, closure, dir), r.Version.Raw)
+		// FetchRuntimeEnvIn, not FetchRuntimeEnv: a recipe may point at a
+		// DEPENDENCY's prefix, and only the closure can resolve that.
+		// rust-lang.org/cargo sets
+		//   CARGO_HTTP_CAINFO: ${{deps.curl.se/ca-certs.prefix}}/ssl/cert.pem
+		// and without the closure cargo built with no CA bundle at all.
+		env, err := bottle.FetchRuntimeEnvIn(r.Project, closure, dir)
 		if err != nil {
 			if bottle.Warn != nil {
 				bottle.Warn(fmt.Sprintf("cannot read %s's runtime env: %v", r.Project, err))
