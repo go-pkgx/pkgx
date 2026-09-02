@@ -12,10 +12,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -36,6 +38,10 @@ usage:
                                      e.g. pkgx +git +gnu.org/bash -- build.sh
   pkgx +<pkg> [+<pkg>...]            print the environment those packages bring,
                                      for eval "$(pkgx +gnu.org/make +llvm.org)"
+  pkgx --json +<pkg>...              the same environment as JSON, for a tool
+                                     that composes it (see --modulefile)
+  pkgx --modulefile +<pkg>...        the same environment as an Lmod modulefile,
+                                     so an HPC site keeps its module command
   pkgx -h, --help                    show this help
   pkgx -v, --version                 show version
 
@@ -84,12 +90,42 @@ func run(argv []string) int {
 		return 0
 	}
 
+	format, argv := splitFormat(argv)
 	plus, rest := splitPlus(argv)
-	if err := exec(plus, rest, os.Stdout); err != nil {
+	if format != formatShell && (len(plus) == 0 || len(rest) > 0) {
+		fmt.Fprintln(os.Stderr, "pkgx: --json and --modulefile describe a package set: give +pkg and no command")
+		return 2
+	}
+	if err := exec(plus, rest, format, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
 		return 1
 	}
 	return 0
+}
+
+// outputFormat selects how `pkgx +a +b` renders the environment it composed.
+// The three renderings are the SAME data: one resolution, one closure, one set
+// of variables. A second code path that recomputed any of it would drift.
+type outputFormat int
+
+const (
+	formatShell      outputFormat = iota // export lines, for eval "$(pkgx +a)"
+	formatJSON                           // the composed environment as data
+	formatModulefile                     // an Lmod modulefile (Lua)
+)
+
+// splitFormat pulls a leading --json / --modulefile off the argument list.
+func splitFormat(argv []string) (outputFormat, []string) {
+	if len(argv) == 0 {
+		return formatShell, argv
+	}
+	switch argv[0] {
+	case "--json":
+		return formatJSON, argv[1:]
+	case "--modulefile":
+		return formatModulefile, argv[1:]
+	}
+	return formatShell, argv
 }
 
 // splitPlus separates leading "+pkg" tokens from the remainder. A lone "--"
@@ -120,7 +156,7 @@ func splitPlus(argv []string) (plus, rest []string) {
 //     primary program (its declared bin matching the project leaf).
 //   - `pkgx +a +b [cmd...]`  -> materialise a and b; run cmd resolved from
 //     their bin dirs (or, with no cmd, the primary program of the last +pkg).
-func exec(plus, rest []string, stdout io.Writer) error {
+func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 	dir := bottle.Dir()
 
 	// The set of packages to materialise, and the program to run.
@@ -166,7 +202,7 @@ func exec(plus, rest []string, stdout io.Writer) error {
 				setupRootfs(loader, "")
 			}
 		}
-		return envMode(closure, dir, stdout)
+		return envMode(closure, dir, format, stdout)
 	}
 
 	// Every requested root's bin dir joins PATH so `program` resolves across
@@ -293,19 +329,69 @@ func constraint(spec string) string {
 // readability at call sites that mean "the project to run").
 func spec(s string) string { return project(s) }
 
-// envMode prints the shell assignments that bring a package set into the
-// current environment — what `eval "$(pkgx +a +b)"` consumes. It covers the
-// WHOLE closure (dependencies included), so a compiler invoked afterwards finds
-// every dependency's headers, libraries and pkg-config files.
+// composed is the environment a package set brings, as DATA: one resolution,
+// one closure, one set of variables, rendered three ways (shell, JSON, Lmod).
+// A second code path that recomputed any of it would drift from this one, and
+// the drift would show up as a module that works under eval and not under
+// `module load`.
+type composed struct {
+	Closure []pkgRef `json:"closure"`
+	Env     []envVar `json:"env"`
+}
+
+// pkgRef names one member of the closure and where it was materialised.
+type pkgRef struct {
+	Project string `json:"project"`
+	Version string `json:"version"`
+	Prefix  string `json:"prefix"`
+}
+
+// envVar is one variable the package set contributes. Exactly one of Prepend
+// and Value is set: Prepend joins the existing value (PATH and friends), Value
+// replaces it (what a recipe's `runtime: env:` block declares).
+type envVar struct {
+	Name    string   `json:"name"`
+	Prepend []string `json:"prepend,omitempty"`
+	Value   string   `json:"value,omitempty"`
+}
+
+// envMode prints the environment a package set brings, in the requested
+// rendering — what `eval "$(pkgx +a +b)"` consumes, what a module generator
+// reads, or a modulefile an HPC site can install. It covers the WHOLE closure
+// (dependencies included), so a compiler invoked afterwards finds every
+// dependency's headers, libraries and pkg-config files.
+func envMode(closure []bottle.Resolved, dir string, format outputFormat, stdout io.Writer) error {
+	c := composeEnv(closure, dir)
+	switch format {
+	case formatJSON:
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(c)
+	case formatModulefile:
+		return writeModulefile(c, stdout)
+	}
+	for _, e := range c.Env {
+		if e.Value != "" {
+			fmt.Fprintf(stdout, "export %s=%q\n", e.Name, e.Value)
+			continue
+		}
+		fmt.Fprintf(stdout, "export %s=\"%s${%s:+:$%s}\"\n", e.Name, strings.Join(e.Prepend, ":"), e.Name, e.Name)
+	}
+	return nil
+}
+
+// composeEnv computes what the closure contributes.
 //
 // Note lib64: a bottle built on x86-64 may install its libraries and .pc files
 // under lib64 rather than lib. Upstream pkgx only exports lib/pkgconfig, which
 // is why a linux/x86-64 build of wget could not find openssl through
 // pkg-config. Both are exported here.
-func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
+func composeEnv(closure []bottle.Resolved, dir string) composed {
+	var c composed
 	var bin, ld, lib, cpath, pc, xdg, aclocal, cmake []string
 	for _, r := range closure {
 		p := bottle.PrefixOf(r.Project, closure, dir)
+		c.Closure = append(c.Closure, pkgRef{Project: r.Project, Version: r.Version.Raw, Prefix: p})
 		// CMake's find_package searches <prefix>/{include,lib,…} for every entry
 		// of CMAKE_PREFIX_PATH. CPATH and LIBRARY_PATH mean nothing to it, so a
 		// cmake recipe's find_package(ZLIB) failed with "Could NOT find ZLIB
@@ -353,10 +439,9 @@ func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
 		{"ACLOCAL_PATH", aclocal},
 		{"CMAKE_PREFIX_PATH", cmake},
 	} {
-		if len(e.dirs) == 0 {
-			continue
+		if len(e.dirs) > 0 {
+			c.Env = append(c.Env, envVar{Name: e.name, Prepend: e.dirs})
 		}
-		fmt.Fprintf(stdout, "export %s=\"%s${%s:+:$%s}\"\n", e.name, strings.Join(e.dirs, ":"), e.name, e.name)
 	}
 	// Then each package's OWN declarations. A `runtime: env:` block is how a
 	// package states what its consumers need: gnu.org/help2man bundles the perl
@@ -382,10 +467,10 @@ func envMode(closure []bottle.Resolved, dir string, stdout io.Writer) error {
 			continue
 		}
 		for _, k := range sortedKeys(env) {
-			fmt.Fprintf(stdout, "export %s=%q\n", k, env[k])
+			c.Env = append(c.Env, envVar{Name: k, Value: env[k]})
 		}
 	}
-	return nil
+	return c
 }
 
 // sortedKeys returns a map's keys in a deterministic order, so the emitted
@@ -410,4 +495,62 @@ func addDir(list *[]string, dir string) {
 		}
 	}
 	*list = append(*list, dir)
+}
+
+// modulePrepend matches a runtime-env value that COMPOSES with the variable it
+// sets — `<path>:$NAME`, which is how a recipe says "put mine in front of what
+// is already there". PYTHONPATH is the case that matters: a dozen recipes in
+// the pantry write `{{prefix}}/lib/python3.12/site-packages:$PYTHONPATH`.
+//
+// In shell that composes on its own. Lmod has no shell to expand it, so the
+// value has to be recognised and turned into prepend_path — otherwise the
+// modulefile would literally set PYTHONPATH to a string containing `$PYTHONPATH`
+// and every python underneath would see a path that does not exist.
+var modulePrepend = regexp.MustCompile(`^(.*):\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$`)
+
+// writeModulefile renders the composed environment as an Lmod modulefile (Lua),
+// which is also a valid Environment Modules 4.x modulefile — both read Lua.
+//
+// Why generate rather than replace: a site's users know `module load`, their job
+// scripts call it, and their documentation says so. The part worth replacing is
+// what sits UNDER the modulefile — a hand-built tree on a shared filesystem —
+// not the command people type. This gives them signed, content-addressed,
+// closure-complete prefixes with the front-end they already have.
+func writeModulefile(c composed, stdout io.Writer) error {
+	fmt.Fprintln(stdout, "-- Generated by pkgx --modulefile. Do not edit: regenerate.")
+	fmt.Fprintln(stdout, "--")
+	fmt.Fprintln(stdout, "-- The closure this module puts on PATH, with the exact version of each")
+	fmt.Fprintln(stdout, "-- member. Every prefix is content-addressed and immutable, so a module")
+	fmt.Fprintln(stdout, "-- that loaded once loads the same tree forever.")
+	for _, p := range c.Closure {
+		fmt.Fprintf(stdout, "--   %s %s\n", p.Project, p.Version)
+	}
+	fmt.Fprintln(stdout)
+	if len(c.Closure) > 0 {
+		fmt.Fprintf(stdout, "whatis(%q)\n\n", "pkgx closure rooted at "+c.Closure[0].Project+" "+c.Closure[0].Version)
+	}
+	for _, e := range c.Env {
+		if len(e.Prepend) > 0 {
+			// Reverse order: prepend_path pushes each entry to the FRONT, so
+			// emitting them in order would end with the list back to front.
+			for i := len(e.Prepend) - 1; i >= 0; i-- {
+				fmt.Fprintf(stdout, "prepend_path(%q, %q)\n", e.Name, e.Prepend[i])
+			}
+			continue
+		}
+		if m := modulePrepend.FindStringSubmatch(e.Value); m != nil && m[2] == e.Name {
+			fmt.Fprintf(stdout, "prepend_path(%q, %q)\n", e.Name, m[1])
+			continue
+		}
+		if strings.Contains(e.Value, "$") {
+			// Said out loud rather than mangled: a value referring to some OTHER
+			// variable cannot be expressed as a prepend, and setenv would install
+			// a literal dollar sign. Nothing in the pantry does this today; if
+			// something starts to, this line is how it will be found.
+			fmt.Fprintf(stdout, "-- SKIPPED %s: value refers to another variable and Lmod cannot expand it: %q\n", e.Name, e.Value)
+			continue
+		}
+		fmt.Fprintf(stdout, "setenv(%q, %q)\n", e.Name, e.Value)
+	}
+	return nil
 }
