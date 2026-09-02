@@ -49,6 +49,9 @@ usage:
                                      where no other module system exists
   pkgx env avail                     list the declared environments
   pkgx env show <environment>        what an environment brings, and from where
+  pkgx env import <modulefile>...    convert Lmod (.lua) or Environment Modules
+                                     (TCL) modulefiles into HCL2 environments,
+                                     refusing anything it would have to guess at
   pkgx -h, --help                    show this help
   pkgx -v, --version                 show version
 
@@ -103,7 +106,7 @@ func run(argv []string) int {
 	// among the ways to run something.
 	if argv[0] == "env" {
 		if len(argv) == 1 {
-			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env init|load|unload|purge|avail|show")
+			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env init|load|unload|purge|avail|show|import")
 			return 2
 		}
 		var err error
@@ -114,6 +117,12 @@ func run(argv []string) int {
 			err = modeShell(argv[1], argv[2:], composeSpecs, osLookupEnv, os.Stdout)
 		case "avail":
 			err = modeAvail(os.Stdout)
+		case "import":
+			if len(argv) < 3 {
+				fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env import <modulefile>...")
+				return 2
+			}
+			err = modeImport(argv[2:], os.Stdout, os.Stderr)
 		case "show":
 			if len(argv) < 3 {
 				fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env show <environment>")
@@ -121,7 +130,7 @@ func run(argv []string) int {
 			}
 			err = modeShow(argv[2], os.Stdout)
 		default:
-			fmt.Fprintln(os.Stderr, "pkgx: unknown env command "+argv[1]+" (init|load|unload|purge|avail|show)")
+			fmt.Fprintln(os.Stderr, "pkgx: unknown env command "+argv[1]+" (init|load|unload|purge|avail|show|import)")
 			return 2
 		}
 		if err != nil {
@@ -393,7 +402,11 @@ type pkgRef struct {
 type envVar struct {
 	Name    string   `json:"name"`
 	Prepend []string `json:"prepend,omitempty"`
+	Append  []string `json:"append,omitempty"`
 	Value   string   `json:"value,omitempty"`
+	// Unset removes the variable. A modulefile that unsets one is saying the
+	// tool below must not see it, and an empty value is not the same thing.
+	Unset bool `json:"unset,omitempty"`
 }
 
 // envMode prints the environment a package set brings, in the requested
@@ -412,11 +425,16 @@ func envMode(closure []bottle.Resolved, dir string, format outputFormat, stdout 
 		return writeModulefile(c, stdout)
 	}
 	for _, e := range c.Env {
-		if e.Value != "" {
+		switch {
+		case e.Unset:
+			fmt.Fprintf(stdout, "unset %s\n", e.Name)
+		case len(e.Append) > 0:
+			fmt.Fprintf(stdout, "export %s=\"${%s:+$%s:}%s\"\n", e.Name, e.Name, e.Name, strings.Join(e.Append, ":"))
+		case len(e.Prepend) > 0:
+			fmt.Fprintf(stdout, "export %s=\"%s${%s:+:$%s}\"\n", e.Name, strings.Join(e.Prepend, ":"), e.Name, e.Name)
+		default:
 			fmt.Fprintf(stdout, "export %s=%q\n", e.Name, e.Value)
-			continue
 		}
-		fmt.Fprintf(stdout, "export %s=\"%s${%s:+:$%s}\"\n", e.Name, strings.Join(e.Prepend, ":"), e.Name, e.Name)
 	}
 	return nil
 }
@@ -571,6 +589,16 @@ func writeModulefile(c composed, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "whatis(%q)\n\n", "pkgx closure rooted at "+c.Closure[0].Project+" "+c.Closure[0].Version)
 	}
 	for _, e := range c.Env {
+		if e.Unset {
+			fmt.Fprintf(stdout, "unsetenv(%q)\n", e.Name)
+			continue
+		}
+		if len(e.Append) > 0 {
+			for _, d := range e.Append {
+				fmt.Fprintf(stdout, "append_path(%q, %q)\n", e.Name, d)
+			}
+			continue
+		}
 		if len(e.Prepend) > 0 {
 			// Reverse order: prepend_path pushes each entry to the FRONT, so
 			// emitting them in order would end with the list back to front.
@@ -601,15 +629,48 @@ func writeModulefile(c composed, stdout io.Writer) error {
 // `pkge load` and `eval "$(pkgx +…)"` cannot disagree about a closure.
 func composeSpecs(specs []string) (composed, error) {
 	dir := bottle.Dir()
+	envs := currentEnvironments()
 	roots := map[string]string{}
-	for _, p := range expandSpecs(specs, currentEnvironments()) {
+	for _, p := range expandSpecs(specs, envs) {
 		roots[project(p)] = constraint(p)
 	}
 	closure, err := bottle.CompleteClosure(roots, dir)
 	if err != nil {
 		return composed{}, err
 	}
-	return composeEnv(closure, dir), nil
+	c := composeEnv(closure, dir)
+	// Then whatever an IMPORTED environment carries, after the packages, so a
+	// site's own tree wins over a bottle's — which is what a site means by
+	// putting it in a modulefile.
+	for _, spec := range specs {
+		e, ok := envs[spec]
+		if !ok {
+			continue
+		}
+		for _, name := range sortedMapListKeys(e.Prepend) {
+			c.Env = append(c.Env, envVar{Name: name, Prepend: e.Prepend[name]})
+		}
+		for _, name := range sortedMapListKeys(e.Append) {
+			c.Env = append(c.Env, envVar{Name: name, Append: e.Append[name]})
+		}
+		for _, name := range sortedMapKeys(e.Setenv) {
+			c.Env = append(c.Env, envVar{Name: name, Value: e.Setenv[name]})
+		}
+		for _, name := range e.Unsetenv {
+			c.Env = append(c.Env, envVar{Name: name, Unset: true})
+		}
+	}
+	return c, nil
+}
+
+// sortedMapListKeys orders a map of lists, so a composition is deterministic.
+func sortedMapListKeys(m map[string][]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // currentEnvironments loads the declared environments, reporting what it cannot
