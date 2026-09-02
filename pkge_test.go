@@ -26,7 +26,7 @@ func twoPkgs(specs []string) (composed, error) {
 }
 
 // A load captures the PRISTINE value of every variable it touches, and says so
-// in PKGXMOD_BASE — that snapshot is the whole reason unload can be exact.
+// in PKGE_BASE — that snapshot is the whole reason unload can be exact.
 func TestLoadCapturesTheBaseOnce(t *testing.T) {
 	env := map[string]string{"PATH": "/usr/bin"}
 	var out strings.Builder
@@ -37,7 +37,7 @@ func TestLoadCapturesTheBaseOnce(t *testing.T) {
 	if !strings.Contains(got, `export PATH='/usr/bin'`) {
 		t.Errorf("the base must be restored before the new value:\n%s", got)
 	}
-	if !strings.Contains(got, "export PKGXMOD_SPECS='a'") {
+	if !strings.Contains(got, "export PKGE_SPECS='a'") {
 		t.Errorf("no spec set:\n%s", got)
 	}
 	// TOOLVAR did not exist: restoring it later must UNSET it, not set it empty.
@@ -45,8 +45,8 @@ func TestLoadCapturesTheBaseOnce(t *testing.T) {
 		t.Errorf("a variable that did not exist must be restored by unsetting:\n%s", got)
 	}
 	// A second load must NOT record the first load's output as the base.
-	base := betweenQuotes(t, got, "export PKGXMOD_BASE=")
-	env2 := map[string]string{"PATH": "/pkgx/a/bin:/usr/bin", "TOOLVAR": "set-by-a", "PKGXMOD_SPECS": "a", "PKGXMOD_BASE": base}
+	base := betweenQuotes(t, got, "export PKGE_BASE=")
+	env2 := map[string]string{"PATH": "/pkgx/a/bin:/usr/bin", "TOOLVAR": "set-by-a", "PKGE_SPECS": "a", "PKGE_BASE": base}
 	var out2 strings.Builder
 	if err := modeShell("load", []string{"b"}, twoPkgs, fakeEnv(env2), &out2); err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ func TestLoadCapturesTheBaseOnce(t *testing.T) {
 	if !strings.Contains(out2.String(), `export PATH='/usr/bin'`) {
 		t.Errorf("the second load recaptured a polluted base:\n%s", out2.String())
 	}
-	if !strings.Contains(out2.String(), "export PKGXMOD_SPECS='a b'") {
+	if !strings.Contains(out2.String(), "export PKGE_SPECS='a b'") {
 		t.Errorf("the second load lost the first spec:\n%s", out2.String())
 	}
 }
@@ -66,10 +66,10 @@ func TestUnloadIsExact(t *testing.T) {
 	if err := modeShell("load", []string{"a", "b", "c"}, twoPkgs, fakeEnv(map[string]string{"PATH": "/usr/bin"}), &loaded); err != nil {
 		t.Fatal(err)
 	}
-	base := betweenQuotes(t, loaded.String(), "export PKGXMOD_BASE=")
+	base := betweenQuotes(t, loaded.String(), "export PKGE_BASE=")
 	env := map[string]string{
 		"PATH": "/pkgx/a/bin:/pkgx/b/bin:/pkgx/c/bin:/usr/bin", "TOOLVAR": "set-by-c",
-		"PKGXMOD_SPECS": "a b c", "PKGXMOD_BASE": base,
+		"PKGE_SPECS": "a b c", "PKGE_BASE": base,
 	}
 	var afterUnload strings.Builder
 	if err := modeShell("unload", []string{"b"}, twoPkgs, fakeEnv(env), &afterUnload); err != nil {
@@ -91,13 +91,13 @@ func TestPurgeRestoresAndForgets(t *testing.T) {
 	if err := modeShell("load", []string{"a"}, twoPkgs, fakeEnv(map[string]string{"PATH": "/usr/bin"}), &loaded); err != nil {
 		t.Fatal(err)
 	}
-	base := betweenQuotes(t, loaded.String(), "export PKGXMOD_BASE=")
+	base := betweenQuotes(t, loaded.String(), "export PKGE_BASE=")
 	var out strings.Builder
-	if err := modeShell("purge", nil, twoPkgs, fakeEnv(map[string]string{"PKGXMOD_SPECS": "a", "PKGXMOD_BASE": base}), &out); err != nil {
+	if err := modeShell("purge", nil, twoPkgs, fakeEnv(map[string]string{"PKGE_SPECS": "a", "PKGE_BASE": base}), &out); err != nil {
 		t.Fatal(err)
 	}
 	got := out.String()
-	for _, want := range []string{`export PATH='/usr/bin'`, "unset TOOLVAR", "unset PKGXMOD_SPECS", "unset PKGXMOD_BASE"} {
+	for _, want := range []string{`export PATH='/usr/bin'`, "unset TOOLVAR", "unset PKGE_SPECS", "unset PKGE_BASE"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("purge is missing %q:\n%s", want, got)
 		}
@@ -117,27 +117,27 @@ func TestLoadSwapsTheSameProject(t *testing.T) {
 // `unload x` must work whether x was loaded bare or with a constraint —
 // otherwise nobody can unload what they loaded.
 func TestUnloadByProjectName(t *testing.T) {
-	env := map[string]string{"PKGXMOD_SPECS": "nodejs.org@22 gnu.org/bash"}
+	env := map[string]string{"PKGE_SPECS": "nodejs.org@22 gnu.org/bash"}
 	var out strings.Builder
 	if err := modeShell("unload", []string{"nodejs.org"}, twoPkgs, fakeEnv(env), &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "export PKGXMOD_SPECS='gnu.org/bash'") {
+	if !strings.Contains(out.String(), "export PKGE_SPECS='gnu.org/bash'") {
 		t.Errorf("unload by project name did not drop the constrained spec:\n%s", out.String())
 	}
 }
 
 // A value containing a quote, a space or a newline must survive the round trip:
-// PKGXMOD_BASE is base64 for exactly this reason, and every emission is quoted.
+// PKGE_BASE is base64 for exactly this reason, and every emission is quoted.
 func TestAwkwardValuesSurvive(t *testing.T) {
 	nasty := "a b'c\nd$e"
 	var out strings.Builder
 	if err := modeShell("load", []string{"a"}, twoPkgs, fakeEnv(map[string]string{"PATH": nasty}), &out); err != nil {
 		t.Fatal(err)
 	}
-	base := betweenQuotes(t, out.String(), "export PKGXMOD_BASE=")
+	base := betweenQuotes(t, out.String(), "export PKGE_BASE=")
 	st := loadModState(func(n string) string {
-		if n == "PKGXMOD_BASE" {
+		if n == "PKGE_BASE" {
 			return base
 		}
 		return ""
@@ -154,10 +154,10 @@ func TestAwkwardValuesSurvive(t *testing.T) {
 }
 
 // Unreadable state is treated as no state: a shell with a corrupted
-// PKGXMOD_BASE must still be usable, not permanently broken.
+// PKGE_BASE must still be usable, not permanently broken.
 func TestCorruptBaseIsIgnored(t *testing.T) {
 	st := loadModState(func(n string) string {
-		if n == "PKGXMOD_BASE" {
+		if n == "PKGE_BASE" {
 			return "not base64 !!"
 		}
 		return ""
@@ -179,7 +179,7 @@ func TestShellInitIsValidShell(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := filepath.Join(t.TempDir(), "init.sh")
-	if err := os.WriteFile(f, []byte(out.String()+"\npkgxmod help 2>/dev/null\n"), 0o644); err != nil {
+	if err := os.WriteFile(f, []byte(out.String()+"\npkge help 2>/dev/null\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if b, err := osexec.Command(sh, "-n", f).CombinedOutput(); err != nil {
