@@ -175,7 +175,7 @@ func TestShellInitIsValidShell(t *testing.T) {
 		t.Skip("no sh")
 	}
 	var out strings.Builder
-	if err := modeShellInit(&out); err != nil {
+	if err := modeShellInit(false, &out); err != nil {
 		t.Fatal(err)
 	}
 	f := filepath.Join(t.TempDir(), "init.sh")
