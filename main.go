@@ -42,6 +42,9 @@ usage:
                                      that composes it (see --modulefile)
   pkgx --modulefile +<pkg>...        the same environment as an Lmod modulefile,
                                      so an HPC site keeps its module command
+  pkgx --shell-init                  print the pkgxmod shell function, for
+                                     eval "$(pkgx --shell-init)" in a profile:
+                                     pkgxmod load|unload|purge|list|save|restore
   pkgx -h, --help                    show this help
   pkgx -v, --version                 show version
 
@@ -87,6 +90,22 @@ func run(argv []string) int {
 		return 0
 	case "-v", "--version":
 		fmt.Println("pkgx " + version)
+		return 0
+	}
+
+	switch argv[0] {
+	case "--shell-init":
+		if err := modeShellInit(os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
+			return 1
+		}
+		return 0
+	case "--shell-load", "--shell-unload", "--shell-purge":
+		action := strings.TrimPrefix(argv[0], "--shell-")
+		if err := modeShell(action, argv[1:], composeSpecs, osLookupEnv, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
+			return 1
+		}
 		return 0
 	}
 
@@ -553,4 +572,20 @@ func writeModulefile(c composed, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "setenv(%q, %q)\n", e.Name, e.Value)
 	}
 	return nil
+}
+
+// composeSpecs resolves a package set and returns what it contributes to the
+// environment. It is the module front-end's one entry into the resolver, so
+// `pkgxmod load` and `eval "$(pkgx +…)"` cannot disagree about a closure.
+func composeSpecs(specs []string) (composed, error) {
+	dir := bottle.Dir()
+	roots := map[string]string{}
+	for _, p := range specs {
+		roots[project(p)] = constraint(p)
+	}
+	closure, err := bottle.CompleteClosure(roots, dir)
+	if err != nil {
+		return composed{}, err
+	}
+	return composeEnv(closure, dir), nil
 }
