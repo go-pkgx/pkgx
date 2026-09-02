@@ -42,8 +42,8 @@ usage:
                                      that composes it (see --modulefile)
   pkgx --modulefile +<pkg>...        the same environment as an Lmod modulefile,
                                      so an HPC site keeps its module command
-  pkgx --shell-init                  print the pkge shell function, for
-                                     eval "$(pkgx --shell-init)" in a profile:
+  pkgx env init                      print the pkge shell function, for
+                                     eval "$(pkgx env init)" in a profile:
                                      pkge load|unload|purge|list|save|restore
   pkgx -h, --help                    show this help
   pkgx -v, --version                 show version
@@ -93,16 +93,26 @@ func run(argv []string) int {
 		return 0
 	}
 
-	switch argv[0] {
-	case "--shell-init":
-		if err := modeShellInit(os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
-			return 1
+	// `pkgx env …` is the environment front-end's one entry point. A verb rather
+	// than four top-level flags: the flags are not options on running a package,
+	// they are a different job, and `pkgx --help` should not have to list them
+	// among the ways to run something.
+	if argv[0] == "env" {
+		if len(argv) == 1 {
+			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env init|load|unload|purge")
+			return 2
 		}
-		return 0
-	case "--shell-load", "--shell-unload", "--shell-purge":
-		action := strings.TrimPrefix(argv[0], "--shell-")
-		if err := modeShell(action, argv[1:], composeSpecs, osLookupEnv, os.Stdout); err != nil {
+		var err error
+		switch argv[1] {
+		case "init":
+			err = modeShellInit(os.Stdout)
+		case "load", "unload", "purge":
+			err = modeShell(argv[1], argv[2:], composeSpecs, osLookupEnv, os.Stdout)
+		default:
+			fmt.Fprintln(os.Stderr, "pkgx: unknown env command "+argv[1]+" (init|load|unload|purge)")
+			return 2
+		}
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
 			return 1
 		}
