@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -130,7 +131,7 @@ func TestEnvMode(t *testing.T) {
 		{Project: "dep.org", Version: bottle.ParseVer("2.0.0")},
 	}
 	var out strings.Builder
-	if err := envMode(closure, dir, &out); err != nil {
+	if err := envMode(closure, dir, formatShell, &out); err != nil {
 		t.Fatal(err)
 	}
 	got := out.String()
@@ -161,7 +162,7 @@ func TestEnvMode(t *testing.T) {
 	}
 	// a package contributing nothing emits no variable at all
 	var empty strings.Builder
-	if err := envMode(nil, dir, &empty); err != nil || empty.String() != "" {
+	if err := envMode(nil, dir, formatShell, &empty); err != nil || empty.String() != "" {
 		t.Errorf("empty closure → %q, %v", empty.String(), err)
 	}
 }
@@ -226,7 +227,7 @@ func TestEnvModeRuntimeEnv(t *testing.T) {
 		{Project: "plain.org", Version: bottle.ParseVer("1.0.0")},
 	}
 	var out strings.Builder
-	if err := envMode(closure, dir, &out); err != nil {
+	if err := envMode(closure, dir, formatShell, &out); err != nil {
 		t.Fatal(err)
 	}
 	want := `export PERL5LIB="` + filepath.Join(dir, "gnu.org/help2man/v1.49.3") + `/lib/perl5:$PERL5LIB"`
@@ -253,7 +254,7 @@ func TestEnvModeRuntimeEnvUnfetchable(t *testing.T) {
 	defer func() { bottle.Warn = nil }()
 
 	var out strings.Builder
-	if err := envMode([]bottle.Resolved{{Project: "ghost.org", Version: bottle.ParseVer("9.9.9")}}, dir, &out); err != nil {
+	if err := envMode([]bottle.Resolved{{Project: "ghost.org", Version: bottle.ParseVer("9.9.9")}}, dir, formatShell, &out); err != nil {
 		t.Fatalf("an unfetchable recipe must not fail the env: %v", err)
 	}
 	if !strings.Contains(out.String(), "export PATH=") {
@@ -302,7 +303,7 @@ func TestEnvModeKeepsLibcHeadersOffCPATH(t *testing.T) {
 		{Project: "zlib.net", Version: bottle.ParseVer("1.3.2")},
 	}
 	var out strings.Builder
-	if err := envMode(closure, dir, &out); err != nil {
+	if err := envMode(closure, dir, formatShell, &out); err != nil {
 		t.Fatal(err)
 	}
 	for _, line := range strings.Split(out.String(), "\n") {
@@ -345,11 +346,158 @@ func TestEnvModeDepPrefix(t *testing.T) {
 		{Project: "curl.se/ca-certs", Version: bottle.ParseVer("2026.8.13")},
 	}
 	var out strings.Builder
-	if err := envMode(closure, dir, &out); err != nil {
+	if err := envMode(closure, dir, formatShell, &out); err != nil {
 		t.Fatal(err)
 	}
 	want := `export CAINFO="` + filepath.Join(dir, "curl.se/ca-certs/v2026.8.13") + `/ssl/cert.pem"`
 	if !strings.Contains(out.String(), want) {
 		t.Errorf("missing %q in:\n%s", want, out.String())
+	}
+}
+
+// mkClosure lays out two bottle prefixes on disk and returns the closure over
+// them: tool.org with the classic lib layout, dep.org with the lib64 one.
+func mkClosure(t *testing.T, dir string) []bottle.Resolved {
+	t.Helper()
+	for _, parts := range [][]string{
+		{"tool.org", "v1.0.0", "bin"},
+		{"tool.org", "v1.0.0", "lib", "pkgconfig"},
+		{"tool.org", "v1.0.0", "include"},
+		{"dep.org", "v2.0.0", "lib64"},
+	} {
+		if err := os.MkdirAll(filepath.Join(append([]string{dir}, parts...)...), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return []bottle.Resolved{
+		{Project: "tool.org", Version: bottle.ParseVer("1.0.0")},
+		{Project: "dep.org", Version: bottle.ParseVer("2.0.0")},
+	}
+}
+
+// TestEnvModeJSON: the same composition as data. A generator that had to parse
+// the shell rendering back would be a second implementation of it, and would
+// drift the first time a quoting rule changed.
+func TestEnvModeJSON(t *testing.T) {
+	dir := t.TempDir()
+	closure := mkClosure(t, dir)
+	var out strings.Builder
+	if err := envMode(closure, dir, formatJSON, &out); err != nil {
+		t.Fatal(err)
+	}
+	var got composed
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("not valid JSON: %v\n%s", err, out.String())
+	}
+	if len(got.Closure) != 2 || got.Closure[0].Project != "tool.org" || got.Closure[0].Version != "1.0.0" {
+		t.Errorf("closure = %+v", got.Closure)
+	}
+	if want := filepath.Join(dir, "tool.org", "v1.0.0"); got.Closure[0].Prefix != want {
+		t.Errorf("prefix = %q, want %q", got.Closure[0].Prefix, want)
+	}
+	var path *envVar
+	for i := range got.Env {
+		if got.Env[i].Name == "PATH" {
+			path = &got.Env[i]
+		}
+	}
+	if path == nil || len(path.Prepend) == 0 {
+		t.Fatalf("no PATH in %+v", got.Env)
+	}
+	if path.Value != "" {
+		t.Errorf("a prepended variable must not also carry a value: %+v", path)
+	}
+	// The shell rendering must agree with the data: same variables, same order.
+	var shell strings.Builder
+	if err := envMode(closure, dir, formatShell, &shell); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range got.Env {
+		if !strings.Contains(shell.String(), "export "+e.Name+"=") {
+			t.Errorf("%s is in the JSON and not in the shell rendering", e.Name)
+		}
+	}
+}
+
+// TestModulefile: the Lmod rendering. prepend_path, in the order that leaves
+// the list the right way round, and no shell syntax anywhere.
+func TestModulefile(t *testing.T) {
+	dir := t.TempDir()
+	closure := mkClosure(t, dir)
+	var out strings.Builder
+	if err := envMode(closure, dir, formatModulefile, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if strings.Contains(got, "export ") || strings.Contains(got, "${") {
+		t.Errorf("shell syntax leaked into a modulefile:\n%s", got)
+	}
+	if !strings.Contains(got, `prepend_path("PATH", "`+filepath.Join(dir, "tool.org", "v1.0.0", "bin")+`")`) {
+		t.Errorf("no PATH prepend:\n%s", got)
+	}
+	// The closure is documented in the file: a site reading a generated module
+	// must be able to see exactly which versions it pins.
+	if !strings.Contains(got, "--   tool.org 1.0.0") || !strings.Contains(got, "--   dep.org 2.0.0") {
+		t.Errorf("the closure is not documented:\n%s", got)
+	}
+	if !strings.Contains(got, "whatis(") {
+		t.Errorf("no whatis:\n%s", got)
+	}
+}
+
+// A `runtime: env:` value of the shape `<path>:$NAME` MUST become a
+// prepend_path, not a setenv: Lmod has no shell to expand the reference, and a
+// dozen pantry recipes write exactly that for PYTHONPATH.
+func TestModulefileTurnsSelfReferenceIntoPrepend(t *testing.T) {
+	var out strings.Builder
+	c := composed{Env: []envVar{
+		{Name: "PYTHONPATH", Value: "/p/lib/python3.12/site-packages:$PYTHONPATH"},
+		{Name: "BRACED", Value: "/p/x:${BRACED}"},
+		{Name: "PLAIN", Value: "/p/share/tessdata"},
+		{Name: "OTHER", Value: "/p/x:$SOMETHING_ELSE"},
+	}}
+	if err := writeModulefile(c, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		`prepend_path("PYTHONPATH", "/p/lib/python3.12/site-packages")`,
+		`prepend_path("BRACED", "/p/x")`,
+		`setenv("PLAIN", "/p/share/tessdata")`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in:\n%s", want, got)
+		}
+	}
+	// A value referring to some OTHER variable cannot be expressed, and is said
+	// out loud rather than mangled into a literal dollar sign.
+	if !strings.Contains(got, "-- SKIPPED OTHER:") {
+		t.Errorf("an inexpressible value must be reported:\n%s", got)
+	}
+	if strings.Contains(got, `setenv("OTHER"`) {
+		t.Errorf("an inexpressible value must not be set literally:\n%s", got)
+	}
+}
+
+// --json and --modulefile describe a package set. Given a command to run, or no
+// package at all, they are a usage error rather than a silently ignored flag.
+func TestFormatFlagsNeedAPackageSet(t *testing.T) {
+	if f, rest := splitFormat([]string{"--json", "+a"}); f != formatJSON || len(rest) != 1 {
+		t.Errorf("splitFormat(--json) = %v, %v", f, rest)
+	}
+	if f, rest := splitFormat([]string{"--modulefile", "+a"}); f != formatModulefile || len(rest) != 1 {
+		t.Errorf("splitFormat(--modulefile) = %v, %v", f, rest)
+	}
+	if f, _ := splitFormat([]string{"+a"}); f != formatShell {
+		t.Errorf("no flag must mean the shell rendering")
+	}
+	if f, _ := splitFormat(nil); f != formatShell {
+		t.Errorf("no argument must mean the shell rendering")
+	}
+	if code := run([]string{"--json"}); code != 2 {
+		t.Errorf("--json with no package = %d, want 2", code)
+	}
+	if code := run([]string{"--json", "+a", "cmd"}); code != 2 {
+		t.Errorf("--json with a command = %d, want 2", code)
 	}
 }
