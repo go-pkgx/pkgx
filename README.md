@@ -25,6 +25,12 @@ pkgx <pkg>[@version] [arg...]      run a package's program ephemerally
 pkgx +<pkg> [+<pkg>...] [cmd ...]  bring packages into the environment and run
                                    cmd with them on PATH + LD_LIBRARY_PATH
                                    e.g. pkgx +git +gnu.org/bash -- ./build.sh
+pkgx --json +<pkg>...              the composed environment as data
+pkgx --modulefile +<pkg>...        the same, as an Lmod modulefile
+pkgx env init [--module]           the pkge shell function (and module/ml)
+pkgx env load|unload|purge         what that function evaluates
+pkgx env avail | show <env>        the declared environments
+pkgx env import <modulefile>...    convert Lmod/Environment Modules files
 pkgx -h,--help   pkgx -v,--version
 ```
 
@@ -35,6 +41,90 @@ v22.x.x
 $ pkgx +git +gnu.org/bash -- sh -c 'git --version'
 git version 2.x.x
 ```
+
+## Environments, and HPC
+
+A module system does two things: it resolves what a package needs, and it edits
+your shell. `pkgx +a +b` already did the first. `pkge` does the second.
+
+```console
+$ eval "$(pkgx env init)"          # in a profile
+$ pkge load gnu.org/sed jq
+$ pkge list
+gnu.org/sed
+stedolan.github.io/jq
+$ pkge unload jq                   # /usr/bin/jq is back, exactly as it was
+$ pkge save mine ; pkge purge ; pkge restore mine
+```
+
+Loading never edits incrementally: it restores the environment it first saw and
+recomposes from the whole set. So `unload b` after `load a b c` leaves precisely
+what `load a c` would have — independent of the order things were loaded in.
+
+### Named environments
+
+```hcl
+# $PKGX_DIR/environments/site.hcl2
+env "cfd" {
+  description = "the solver stack, as validated on 2026-09-01"
+  packages    = ["openmpi.org@5", "hdf5.org", "python.org@3.12"]
+}
+```
+
+`pkge load cfd` — and `pkgx env avail` / `pkgx env show cfd` to see what a site
+declares and from which file. An environment is not a lockfile: it names
+constraints, and the closure is resolved at load time from the signed registry,
+so a login node and a container agree.
+
+### With an existing Lmod
+
+Generate modulefiles and let the site's own Lmod load them. Nothing about
+`module` changes, and conflicts, hierarchies and `spider` keep working because
+Lmod is still the one doing the work.
+
+```console
+$ pkgx --modulefile +openmpi.org@5 > $MODULEPATH_DIR/openmpi/5.0.8.lua
+```
+
+### Without one
+
+`pkgx env init --module` also defines `module` and `ml`, for a container, a
+laptop or a cluster built on this toolchain. It **refuses** to install itself
+where an Lmod already exists, and says to generate modulefiles instead: two
+implementations answering one command is how a support ticket becomes
+unanswerable.
+
+`LOADEDMODULES` is maintained, because job scripts read it. `_LMFILES_` is not:
+it names modulefiles, there are none, and an invented value is a lie a script
+could act on.
+
+### Converting a site's modulefiles
+
+```console
+$ pkgx env import /opt/modulefiles/openmpi.lua /opt/modulefiles/hdf5 \
+    > $PKGX_DIR/environments/site.hcl2
+```
+
+Lmod's Lua and Environment Modules' TCL, into the same HCL2. It is a **parser,
+not an evaluator**: an interpreter runs a modulefile and silently skips what it
+does not implement, and the result is not an error but an environment that is
+subtly wrong, found inside somebody's job. This refuses anything it would have
+to guess at, names the line, and writes nothing at all if any file was refused.
+
+```
+line 2: argument is not a string literal (pathJoin(root, "bin")):
+  its value depends on something we are not running
+line 3: depends_on states a RELATIONSHIP between modules, not an environment
+  change: decide it in the environment that replaces this one
+```
+
+### Two things no code here removes
+
+- **MPI and the interconnect come from the host.** libfabric/UCX, Slurm's PMI
+  and a vendor libmpi tied to a kernel driver cannot live in a hermetic tree;
+  bind-mount them, as Spack and Apptainer do.
+- **Metadata storms.** Ten thousand ranks walking a shared `$PKGX_DIR` will melt
+  a Lustre MDS. Materialise once into a squashfs or SIF and mount it read-only.
 
 ## Environment
 
