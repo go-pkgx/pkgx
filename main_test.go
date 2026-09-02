@@ -501,3 +501,17 @@ func TestFormatFlagsNeedAPackageSet(t *testing.T) {
 		t.Errorf("--json with a command = %d, want 2", code)
 	}
 }
+
+// `pkgx env` is the front-end's one entry point, and its failure modes must be
+// usage errors rather than a silent fall-through into "run a package called env".
+func TestEnvVerb(t *testing.T) {
+	if code := run([]string{"env"}); code != 2 {
+		t.Errorf("bare `pkgx env` = %d, want 2", code)
+	}
+	if code := run([]string{"env", "nonsense"}); code != 2 {
+		t.Errorf("unknown env command = %d, want 2", code)
+	}
+	if code := run([]string{"env", "init"}); code != 0 {
+		t.Errorf("`pkgx env init` = %d, want 0", code)
+	}
+}

@@ -121,14 +121,14 @@ func shellQuote(s string) string {
 }
 
 // shellInit is the front-end itself: a shell function, printed for
-// `eval "$(pkgx --shell-init)"` in a profile. It is deliberately thin — every
+// `eval "$(pkgx env init)"` in a profile. It is deliberately thin — every
 // decision is made by pkgx, which can be tested; the function only evaluates
 // what pkgx prints.
 const shellInit = `pkge() {
   _pkge_cmd="${1-}"; [ $# -gt 0 ] && shift
   case "$_pkge_cmd" in
     load|unload|purge)
-      _pkge_out=$(command pkgx --shell-"$_pkge_cmd" "$@") || return $?
+      _pkge_out=$(command pkgx env "$_pkge_cmd" "$@") || return $?
       eval "$_pkge_out" ;;
     list)
       # shellcheck disable=SC2086
