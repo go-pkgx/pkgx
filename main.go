@@ -42,9 +42,9 @@ usage:
                                      that composes it (see --modulefile)
   pkgx --modulefile +<pkg>...        the same environment as an Lmod modulefile,
                                      so an HPC site keeps its module command
-  pkgx --shell-init                  print the pkgxmod shell function, for
+  pkgx --shell-init                  print the pkge shell function, for
                                      eval "$(pkgx --shell-init)" in a profile:
-                                     pkgxmod load|unload|purge|list|save|restore
+                                     pkge load|unload|purge|list|save|restore
   pkgx -h, --help                    show this help
   pkgx -v, --version                 show version
 
@@ -576,7 +576,7 @@ func writeModulefile(c composed, stdout io.Writer) error {
 
 // composeSpecs resolves a package set and returns what it contributes to the
 // environment. It is the module front-end's one entry into the resolver, so
-// `pkgxmod load` and `eval "$(pkgx +…)"` cannot disagree about a closure.
+// `pkge load` and `eval "$(pkgx +…)"` cannot disagree about a closure.
 func composeSpecs(specs []string) (composed, error) {
 	dir := bottle.Dir()
 	roots := map[string]string{}

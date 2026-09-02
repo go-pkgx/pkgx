@@ -1,13 +1,13 @@
 package main
 
-// The module front-end: `pkgxmod load/unload/purge/list/save/restore`, an
+// The module front-end: `pkge load/unload/purge/list/save/restore`, an
 // Lmod-shaped command over pkgx's own resolution.
 //
 // The design decision that makes it exact: state lives in the ENVIRONMENT and
 // is read back by pkgx, not by the shell.
 //
-//   PKGXMOD_SPECS  the package set currently loaded, space-separated
-//   PKGXMOD_BASE   the ORIGINAL value of every variable pkgx has touched,
+//   PKGE_SPECS  the package set currently loaded, space-separated
+//   PKGE_BASE   the ORIGINAL value of every variable pkgx has touched,
 //                  base64 of NUL-separated NAME=value records
 //
 // The records are separated by NUL, not by a newline. base64 protects the
@@ -45,11 +45,11 @@ type modState struct {
 	had map[string]bool
 }
 
-// loadModState reads PKGXMOD_SPECS and PKGXMOD_BASE from the environment.
+// loadModState reads PKGE_SPECS and PKGE_BASE from the environment.
 func loadModState(getenv func(string) string) modState {
 	st := modState{base: map[string]string{}, had: map[string]bool{}}
-	st.specs = strings.Fields(getenv("PKGXMOD_SPECS"))
-	raw, err := base64.StdEncoding.DecodeString(getenv("PKGXMOD_BASE"))
+	st.specs = strings.Fields(getenv("PKGE_SPECS"))
+	raw, err := base64.StdEncoding.DecodeString(getenv("PKGE_BASE"))
 	if err != nil {
 		return st // unreadable state is treated as none: the next load recaptures
 	}
@@ -69,7 +69,7 @@ func loadModState(getenv func(string) string) modState {
 	return st
 }
 
-// encode renders the state's base for PKGXMOD_BASE.
+// encode renders the state's base for PKGE_BASE.
 func (st modState) encode() string {
 	names := make([]string, 0, len(st.base))
 	for n := range st.base {
@@ -124,30 +124,30 @@ func shellQuote(s string) string {
 // `eval "$(pkgx --shell-init)"` in a profile. It is deliberately thin — every
 // decision is made by pkgx, which can be tested; the function only evaluates
 // what pkgx prints.
-const shellInit = `pkgxmod() {
-  _pkgxmod_cmd="${1-}"; [ $# -gt 0 ] && shift
-  case "$_pkgxmod_cmd" in
+const shellInit = `pkge() {
+  _pkge_cmd="${1-}"; [ $# -gt 0 ] && shift
+  case "$_pkge_cmd" in
     load|unload|purge)
-      _pkgxmod_out=$(command pkgx --shell-"$_pkgxmod_cmd" "$@") || return $?
-      eval "$_pkgxmod_out" ;;
+      _pkge_out=$(command pkgx --shell-"$_pkge_cmd" "$@") || return $?
+      eval "$_pkge_out" ;;
     list)
       # shellcheck disable=SC2086
-      [ -n "${PKGXMOD_SPECS-}" ] && printf '%s\n' ${PKGXMOD_SPECS} ;;
+      [ -n "${PKGE_SPECS-}" ] && printf '%s\n' ${PKGE_SPECS} ;;
     save)
-      [ -n "${1-}" ] || { echo "pkgxmod save <name>" >&2; return 2; }
+      [ -n "${1-}" ] || { echo "pkge save <name>" >&2; return 2; }
       mkdir -p "${PKGX_DIR:-$HOME/.pkgx}/collections" &&
-      printf '%s\n' "${PKGXMOD_SPECS-}" > "${PKGX_DIR:-$HOME/.pkgx}/collections/$1" ;;
+      printf '%s\n' "${PKGE_SPECS-}" > "${PKGX_DIR:-$HOME/.pkgx}/collections/$1" ;;
     restore)
-      [ -n "${1-}" ] || { echo "pkgxmod restore <name>" >&2; return 2; }
-      _pkgxmod_f="${PKGX_DIR:-$HOME/.pkgx}/collections/$1"
-      [ -r "$_pkgxmod_f" ] || { echo "pkgxmod: no collection $1" >&2; return 1; }
-      pkgxmod purge || return $?
+      [ -n "${1-}" ] || { echo "pkge restore <name>" >&2; return 2; }
+      _pkge_f="${PKGX_DIR:-$HOME/.pkgx}/collections/$1"
+      [ -r "$_pkge_f" ] || { echo "pkge: no collection $1" >&2; return 1; }
+      pkge purge || return $?
       # shellcheck disable=SC2046
-      pkgxmod load $(cat "$_pkgxmod_f") ;;
+      pkge load $(cat "$_pkge_f") ;;
     ""|help|-h|--help)
-      echo "usage: pkgxmod load|unload <pkg>... | purge | list | save|restore <name>" >&2 ;;
+      echo "usage: pkge load|unload <pkg>... | purge | list | save|restore <name>" >&2 ;;
     *)
-      echo "pkgxmod: unknown command $_pkgxmod_cmd" >&2; return 2 ;;
+      echo "pkge: unknown command $_pkge_cmd" >&2; return 2 ;;
   esac
 }
 `
@@ -215,12 +215,12 @@ func modeShell(action string, args []string, compose func([]string) (composed, e
 	if len(specs) == 0 {
 		// Nothing loaded: the state goes too, so a later load captures a fresh
 		// base rather than one recorded in a previous life of this shell.
-		fmt.Fprintln(stdout, "unset PKGXMOD_SPECS")
-		fmt.Fprintln(stdout, "unset PKGXMOD_BASE")
+		fmt.Fprintln(stdout, "unset PKGE_SPECS")
+		fmt.Fprintln(stdout, "unset PKGE_BASE")
 		return nil
 	}
-	fmt.Fprintf(stdout, "export PKGXMOD_SPECS=%s\n", shellQuote(strings.Join(specs, " ")))
-	fmt.Fprintf(stdout, "export PKGXMOD_BASE=%s\n", shellQuote(st.encode()))
+	fmt.Fprintf(stdout, "export PKGE_SPECS=%s\n", shellQuote(strings.Join(specs, " ")))
+	fmt.Fprintf(stdout, "export PKGE_BASE=%s\n", shellQuote(st.encode()))
 	return nil
 }
 
