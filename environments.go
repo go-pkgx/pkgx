@@ -39,6 +39,15 @@ type environment struct {
 	Description string
 	Packages    []string
 	File        string // where it was declared, for `show`
+
+	// The raw environment operations an IMPORTED modulefile carries. A site's
+	// modulefile points at trees the site installed, not at bottles, so there is
+	// no package to name — `pkgx env import` converts those statements into
+	// these, once, in front of a person.
+	Prepend  map[string][]string
+	Append   map[string][]string
+	Setenv   map[string]string
+	Unsetenv []string
 }
 
 // envSchema is the block shape: env "<name>" { … }.
@@ -48,8 +57,14 @@ var envSchema = &hcl.BodySchema{
 
 var envBodySchema = &hcl.BodySchema{
 	Attributes: []hcl.AttributeSchema{
-		{Name: "packages", Required: true},
+		// packages is NOT required: an environment imported from a modulefile
+		// carries raw path operations and names no package at all.
+		{Name: "packages"},
 		{Name: "description"},
+		{Name: "prepend_path"},
+		{Name: "append_path"},
+		{Name: "setenv"},
+		{Name: "unsetenv"},
 	},
 }
 
@@ -133,8 +148,54 @@ func parseEnvironmentFile(path string, warn func(string)) map[string]environment
 				e.Description = v.AsString()
 			}
 		}
-		if len(e.Packages) == 0 {
-			warn(fmt.Sprintf("ignoring env %q in %s: it names no package", name, path))
+		for attrName, dst := range map[string]*map[string][]string{"prepend_path": &e.Prepend, "append_path": &e.Append} {
+			attr, ok := body.Attributes[attrName]
+			if !ok {
+				continue
+			}
+			v, diags := attr.Expr.Value(nil)
+			if diags.HasErrors() {
+				warn(fmt.Sprintf("ignoring env %q in %s: %s", name, path, diags.Error()))
+				continue
+			}
+			m, err := mapOfStringsOf(v)
+			if err != nil {
+				warn(fmt.Sprintf("ignoring env %q in %s: %s must map a variable to a list of strings: %v", name, path, attrName, err))
+				continue
+			}
+			*dst = m
+		}
+		if attr, ok := body.Attributes["setenv"]; ok {
+			v, diags := attr.Expr.Value(nil)
+			if diags.HasErrors() {
+				warn(fmt.Sprintf("ignoring env %q in %s: %s", name, path, diags.Error()))
+				continue
+			}
+			e.Setenv = map[string]string{}
+			for it := v.ElementIterator(); it.Next(); {
+				k, ev := it.Element()
+				if ev.Type() != cty.String {
+					warn(fmt.Sprintf("ignoring env %q in %s: setenv values must be strings", name, path))
+					continue
+				}
+				e.Setenv[k.AsString()] = ev.AsString()
+			}
+		}
+		if attr, ok := body.Attributes["unsetenv"]; ok {
+			v, diags := attr.Expr.Value(nil)
+			if diags.HasErrors() {
+				warn(fmt.Sprintf("ignoring env %q in %s: %s", name, path, diags.Error()))
+				continue
+			}
+			names, err := stringsOf(v)
+			if err != nil {
+				warn(fmt.Sprintf("ignoring env %q in %s: unsetenv must be a list of strings: %v", name, path, err))
+				continue
+			}
+			e.Unsetenv = names
+		}
+		if len(e.Packages) == 0 && len(e.Prepend) == 0 && len(e.Append) == 0 && len(e.Setenv) == 0 {
+			warn(fmt.Sprintf("ignoring env %q in %s: it neither names a package nor changes a variable", name, path))
 			continue
 		}
 		out[name] = e
@@ -183,6 +244,23 @@ func stringsOf(v cty.Value) ([]string, error) {
 			return nil, fmt.Errorf("element is %s, not a string", ev.Type().FriendlyName())
 		}
 		out = append(out, ev.AsString())
+	}
+	return out, nil
+}
+
+// mapOfStringsOf reads a cty object/map whose values are lists of strings.
+func mapOfStringsOf(v cty.Value) (map[string][]string, error) {
+	if !v.CanIterateElements() {
+		return nil, fmt.Errorf("%s is not a mapping", v.Type().FriendlyName())
+	}
+	out := map[string][]string{}
+	for it := v.ElementIterator(); it.Next(); {
+		k, ev := it.Element()
+		list, err := stringsOf(ev)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", k.AsString(), err)
+		}
+		out[k.AsString()] = list
 	}
 	return out, nil
 }

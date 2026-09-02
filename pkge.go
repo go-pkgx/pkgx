@@ -260,11 +260,16 @@ func modeShell(action string, args []string, compose func([]string) (composed, e
 	// pristine values, so a second load does not stack on the first one's output.
 	st.restoreScript(stdout)
 	for _, e := range c.Env {
-		if e.Value != "" {
+		switch {
+		case e.Unset:
+			fmt.Fprintf(stdout, "unset %s\n", e.Name)
+		case len(e.Append) > 0:
+			fmt.Fprintf(stdout, "export %s=%s\n", e.Name, `"${`+e.Name+`:+${`+e.Name+`}:}"`+shellQuote(strings.Join(e.Append, ":")))
+		case len(e.Prepend) > 0:
+			fmt.Fprintf(stdout, "export %s=%s\n", e.Name, shellQuote(strings.Join(e.Prepend, ":"))+`"${`+e.Name+`:+:${`+e.Name+`}}"`)
+		default:
 			fmt.Fprintf(stdout, "export %s=%s\n", e.Name, shellQuote(e.Value))
-			continue
 		}
-		fmt.Fprintf(stdout, "export %s=%s\n", e.Name, shellQuote(strings.Join(e.Prepend, ":"))+`"${`+e.Name+`:+:${`+e.Name+`}}"`)
 	}
 	if len(specs) == 0 {
 		// Nothing loaded: the state goes too, so a later load captures a fresh
