@@ -42,9 +42,13 @@ usage:
                                      that composes it (see --modulefile)
   pkgx --modulefile +<pkg>...        the same environment as an Lmod modulefile,
                                      so an HPC site keeps its module command
-  pkgx env init                      print the pkge shell function, for
+  pkgx env init [--module]           print the pkge shell function, for
                                      eval "$(pkgx env init)" in a profile:
                                      pkge load|unload|purge|list|save|restore
+                                     --module also defines module() and ml(),
+                                     where no other module system exists
+  pkgx env avail                     list the declared environments
+  pkgx env show <environment>        what an environment brings, and from where
   pkgx -h, --help                    show this help
   pkgx -v, --version                 show version
 
@@ -99,17 +103,25 @@ func run(argv []string) int {
 	// among the ways to run something.
 	if argv[0] == "env" {
 		if len(argv) == 1 {
-			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env init|load|unload|purge")
+			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env init|load|unload|purge|avail|show")
 			return 2
 		}
 		var err error
 		switch argv[1] {
 		case "init":
-			err = modeShellInit(os.Stdout)
+			err = modeShellInit(len(argv) > 2 && argv[2] == "--module", os.Stdout)
 		case "load", "unload", "purge":
 			err = modeShell(argv[1], argv[2:], composeSpecs, osLookupEnv, os.Stdout)
+		case "avail":
+			err = modeAvail(os.Stdout)
+		case "show":
+			if len(argv) < 3 {
+				fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env show <environment>")
+				return 2
+			}
+			err = modeShow(argv[2], os.Stdout)
 		default:
-			fmt.Fprintln(os.Stderr, "pkgx: unknown env command "+argv[1]+" (init|load|unload|purge)")
+			fmt.Fprintln(os.Stderr, "pkgx: unknown env command "+argv[1]+" (init|load|unload|purge|avail|show)")
 			return 2
 		}
 		if err != nil {
@@ -590,7 +602,7 @@ func writeModulefile(c composed, stdout io.Writer) error {
 func composeSpecs(specs []string) (composed, error) {
 	dir := bottle.Dir()
 	roots := map[string]string{}
-	for _, p := range specs {
+	for _, p := range expandSpecs(specs, currentEnvironments()) {
 		roots[project(p)] = constraint(p)
 	}
 	closure, err := bottle.CompleteClosure(roots, dir)
@@ -598,4 +610,50 @@ func composeSpecs(specs []string) (composed, error) {
 		return composed{}, err
 	}
 	return composeEnv(closure, dir), nil
+}
+
+// currentEnvironments loads the declared environments, reporting what it cannot
+// read rather than pretending it was never declared.
+func currentEnvironments() map[string]environment {
+	home, _ := os.UserHomeDir()
+	return loadEnvironments(environmentDirs(bottle.Dir(), home), func(msg string) {
+		fmt.Fprintln(os.Stderr, "pkgx: "+msg)
+	})
+}
+
+// modeAvail lists the declared environments — `module avail`, over the thing a
+// site declares rather than over a directory of hand-written files.
+func modeAvail(stdout io.Writer) error {
+	envs := sortedEnvironments(currentEnvironments())
+	if len(envs) == 0 {
+		fmt.Fprintln(stdout, "no environment declared (see pkgx env show)")
+		return nil
+	}
+	for _, e := range envs {
+		if e.Description != "" {
+			fmt.Fprintf(stdout, "%-24s %s\n", e.Name, e.Description)
+			continue
+		}
+		fmt.Fprintln(stdout, e.Name)
+	}
+	return nil
+}
+
+// modeShow prints one environment: what it brings and where it was declared.
+// Where it was declared matters on a shared system — the first question about a
+// module is always which file said that.
+func modeShow(name string, stdout io.Writer) error {
+	e, ok := currentEnvironments()[name]
+	if !ok {
+		return fmt.Errorf("no environment named %q", name)
+	}
+	fmt.Fprintf(stdout, "env %q\n", e.Name)
+	if e.Description != "" {
+		fmt.Fprintf(stdout, "  description  %s\n", e.Description)
+	}
+	fmt.Fprintf(stdout, "  declared in  %s\n", e.File)
+	for _, p := range e.Packages {
+		fmt.Fprintf(stdout, "  package      %s\n", p)
+	}
+	return nil
 }

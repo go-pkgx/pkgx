@@ -152,9 +152,63 @@ const shellInit = `pkge() {
 }
 `
 
-// modeShellInit prints the shell function.
-func modeShellInit(stdout io.Writer) error {
-	_, err := io.WriteString(stdout, shellInit)
+// moduleShim defines `module` and `ml` in terms of pkge — for a machine that
+// has NO Lmod, which is the point: a container, a laptop, a cluster built on
+// this toolchain. Users keep the command they know and their job scripts keep
+// working, without a Lua interpreter and without a modulefile tree.
+//
+// It REFUSES to install itself where an Lmod exists. Two implementations
+// answering one command is how a support ticket becomes unanswerable, and the
+// site's own modulefiles are not ours to interpret. There, the right move is
+// the other direction — generate modulefiles with `pkgx --modulefile` and let
+// the site's Lmod load them.
+const moduleShim = `
+if command -v lmod >/dev/null 2>&1 || [ -n "${LMOD_CMD-}" ] || [ -n "${MODULESHOME-}" ]; then
+  echo "pkgx: an existing module system was found; not defining module()." >&2
+  echo "pkgx: publish modulefiles to MODULEPATH instead: pkgx --modulefile +pkg" >&2
+else
+  module() {
+    _pkge_sub="${1-}"; [ $# -gt 0 ] && shift
+    case "$_pkge_sub" in
+      load|add)        pkge load "$@" ;;
+      unload|rm|del)   pkge unload "$@" ;;
+      purge)           pkge purge ;;
+      list)            pkge list ;;
+      avail|av)        command pkgx env avail ;;
+      show|display|whatis)
+                       [ -n "${1-}" ] || { echo "module show <environment>" >&2; return 2; }
+                       command pkgx env show "$1" ;;
+      save)            pkge save "$@" ;;
+      restore)         pkge restore "$@" ;;
+      swap|switch)
+                       # module swap OLD NEW, and the one-argument form that
+                       # swaps whatever of that project is loaded.
+                       if [ $# -eq 2 ]; then pkge unload "$1" && pkge load "$2"
+                       else pkge load "$1"; fi ;;
+      ""|help|-h|--help)
+                       echo "usage: module load|unload|purge|list|avail|show|save|restore|swap" >&2 ;;
+      *)               echo "module: unsupported subcommand $_pkge_sub" >&2; return 2 ;;
+    esac
+  }
+  ml() {
+    case "${1-}" in
+      ""|-*) module list ;;
+      *)     module load "$@" ;;
+    esac
+  }
+fi
+`
+
+// modeShellInit prints the shell function, and with module set, the `module`
+// and `ml` compatibility front-end as well.
+func modeShellInit(module bool, stdout io.Writer) error {
+	if _, err := io.WriteString(stdout, shellInit); err != nil {
+		return err
+	}
+	if !module {
+		return nil
+	}
+	_, err := io.WriteString(stdout, moduleShim)
 	return err
 }
 
@@ -217,9 +271,16 @@ func modeShell(action string, args []string, compose func([]string) (composed, e
 		// base rather than one recorded in a previous life of this shell.
 		fmt.Fprintln(stdout, "unset PKGE_SPECS")
 		fmt.Fprintln(stdout, "unset PKGE_BASE")
+		fmt.Fprintln(stdout, "unset LOADEDMODULES")
 		return nil
 	}
 	fmt.Fprintf(stdout, "export PKGE_SPECS=%s\n", shellQuote(strings.Join(specs, " ")))
+	// LOADEDMODULES in Lmod's own spelling (colon-separated), because job
+	// scripts READ it — `if [[ $LOADEDMODULES == *openmpi* ]]` is in thousands
+	// of them. _LMFILES_ is deliberately NOT set: it names modulefiles, and
+	// there are none here. Setting it to something invented would be a lie a
+	// script could act on.
+	fmt.Fprintf(stdout, "export LOADEDMODULES=%s\n", shellQuote(strings.Join(specs, ":")))
 	fmt.Fprintf(stdout, "export PKGE_BASE=%s\n", shellQuote(st.encode()))
 	return nil
 }
