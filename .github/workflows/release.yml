@@ -77,5 +77,5 @@ jobs:
           else
             gh release create "$TAG" dist/* \
               --title "$TAG" \
-              --notes "Static, dependency-free pkgx binaries (CGO_ENABLED=0) for linux, darwin and windows on amd64 and arm64. Verify downloads against SHA256SUMS. Install with: curl -fsSL https://go-pkgx.github.io/install.sh | sh -s -- pkgx"
+              --notes "Static, dependency-free pkgx binaries (CGO_ENABLED=0) for linux, darwin and windows on amd64 and arm64. Verify downloads against SHA256SUMS. Install THIS release with: curl -fsSL https://go-pkgx.github.io/install.sh | sh -s -- pkgx $TAG"
           fi
