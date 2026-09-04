@@ -1,3 +1,5 @@
 /pkgx
 /pkgx.exe
 *.out
+bsd.test
+bsd-tests.list
