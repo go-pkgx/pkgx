@@ -144,11 +144,16 @@ does not implement, and the result is not an error but an environment that is
 subtly wrong, found inside somebody's job. This refuses anything it would have
 to guess at, names the line, and writes nothing at all if any file was refused.
 
-```
-line 2: argument is not a string literal (pathJoin(root, "bin")):
-  its value depends on something we are not running
-line 3: depends_on states a RELATIONSHIP between modules, not an environment
-  change: decide it in the environment that replaces this one
+```console
+$ pkgx env import /opt/modulefiles/openmpi.lua /opt/modulefiles/hdf5
+/opt/modulefiles/openmpi.lua: 3 statement(s) this converter will not guess at:
+  line 3: not a plain call: this converter reads statements, it does not run Lua
+    local root = "/opt/openmpi/5.0.8"
+  line 4: argument is not a string literal (pathJoin(root, "bin")): its value depends on something we are not running
+    prepend_path("PATH", pathJoin(root, "bin"))
+  line 5: depends_on states a RELATIONSHIP between modules, not an environment change: decide it in the environment that replaces this one
+    depends_on("hwloc")
+pkgx: 1 of 2 modulefile(s) not converted — nothing written, because a PARTIAL conversion is the one outcome nobody can check
 ```
 
 ### Two things no code here removes
