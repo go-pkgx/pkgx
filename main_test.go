@@ -124,6 +124,7 @@ func TestEnvMode(t *testing.T) {
 	mk(t, "tool.org", "v1.0.0", "lib", "pkgconfig")
 	mk(t, "tool.org", "v1.0.0", "include")
 	mk(t, "tool.org", "v1.0.0", "share", "aclocal")
+	mk(t, "tool.org", "v1.0.0", "share", "pkgconfig")
 	mk(t, "dep.org", "v2.0.0", "lib64", "pkgconfig")
 
 	closure := []bottle.Resolved{
@@ -141,8 +142,13 @@ func TestEnvMode(t *testing.T) {
 		`export PATH="` + filepath.Join(dir, "tool.org/v1.0.0/bin") + ":" + filepath.Join(dir, "tool.org/v1.0.0/sbin") + `${PATH:+:$PATH}"`,
 		filepath.Join(dir, "dep.org/v2.0.0/lib64/pkgconfig"), // the lib64 case
 		filepath.Join(dir, "tool.org/v1.0.0/lib/pkgconfig"),  // and the lib one
-		filepath.Join(dir, "tool.org/v1.0.0/include"),        // CPATH
-		filepath.Join(dir, "tool.org/v1.0.0/share/aclocal"),  // ACLOCAL_PATH
+		// share/pkgconfig: where a .pc for something architecture-independent
+		// belongs, and where x.org/protocol puts all 29 of its files — xproto.pc
+		// among them. Missing it, a build with the package installed still fails
+		// "Package xproto was not found in the pkg-config search path".
+		filepath.Join(dir, "tool.org/v1.0.0/share/pkgconfig"),
+		filepath.Join(dir, "tool.org/v1.0.0/include"),       // CPATH
+		filepath.Join(dir, "tool.org/v1.0.0/share/aclocal"), // ACLOCAL_PATH
 		"export LD_LIBRARY_PATH=", "export LIBRARY_PATH=", "export XDG_DATA_DIRS=",
 		// CMake ignores CPATH/LIBRARY_PATH entirely; find_package walks
 		// CMAKE_PREFIX_PATH, so the closure's PREFIXES have to be there or a
