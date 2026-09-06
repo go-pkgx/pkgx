@@ -470,6 +470,21 @@ func composeEnv(closure []bottle.Resolved, dir string) composed {
 			addDir(&lib, filepath.Join(p, l))
 			addDir(&pc, filepath.Join(p, l, "pkgconfig"))
 		}
+		// share/pkgconfig too. A .pc file describing something ARCHITECTURE-
+		// INDEPENDENT belongs there by convention, and X.org's protocol headers
+		// are the canonical case: x.org/protocol ships 29 of them, xproto.pc
+		// among them, all under share/pkgconfig. Without this, a build that has
+		// the package installed still cannot find it:
+		//
+		//   checking keysym definitions... Package xproto was not found in the
+		//   pkg-config search path.
+		//   configure: error: /X11 doesn't exist or isn't a directory
+		//
+		// which is what blocked x.org/exts and x.org/x11 on darwin, and through
+		// them tcl, cairo, libxml2 and p11-kit. bk already relocates these files
+		// when it bottles them (fixup rewrites share/pkgconfig and lib/pkgconfig
+		// alike), so they were correct in the bottle and unreachable from it.
+		addDir(&pc, filepath.Join(p, "share", "pkgconfig"))
 		// A libc's headers must NEVER travel on CPATH. CPATH applies to every
 		// compiler invocation, so a bottle glibc's headers reach compilers that
 		// are using the HOST's libc — and two glibc header sets in one
