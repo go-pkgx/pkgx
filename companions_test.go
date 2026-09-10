@@ -35,7 +35,7 @@ func stubCompanions(t *testing.T, recipes map[string]map[string]string, avail ma
 func TestCompanionOfANamedRootIsAdded(t *testing.T) {
 	stubCompanions(t,
 		map[string]map[string]string{"rust-lang.org": {"rust-lang.org/cargo": "*"}},
-		map[string]bool{"rust-lang.org/cargo": true}, nil)
+		map[string]bool{"rust-lang.org": true, "rust-lang.org/cargo": true}, nil)
 
 	roots := map[string]string{"rust-lang.org": "^1.56"}
 	addCompanions(roots)
@@ -50,7 +50,7 @@ func TestCompanionOfANamedRootIsAdded(t *testing.T) {
 func TestUnavailableCompanionIsSkippedQuietly(t *testing.T) {
 	stubCompanions(t,
 		map[string]map[string]string{"a.org": {"b.org/extra": "*"}},
-		map[string]bool{}, nil)
+		map[string]bool{"a.org": true}, nil)
 	var warned []string
 	bottle.Warn = func(m string) { warned = append(warned, m) }
 
@@ -67,7 +67,7 @@ func TestUnavailableCompanionIsSkippedQuietly(t *testing.T) {
 // Failing to READ the recipe is not an answer. Treating "I could not look" as
 // "there are none" is the defect this whole change fixes, so it says so.
 func TestUnreadableCompanionsWarn(t *testing.T) {
-	stubCompanions(t, nil, nil, map[string]error{"a.org": errors.New("404")})
+	stubCompanions(t, nil, map[string]bool{"a.org": true}, map[string]error{"a.org": errors.New("404")})
 	var warned []string
 	bottle.Warn = func(m string) { warned = append(warned, m) }
 
@@ -89,7 +89,7 @@ func TestCompanionsOfCompanionsAreNotFollowed(t *testing.T) {
 			"a.org": {"b.org": "*"},
 			"b.org": {"c.org": "*"},
 		},
-		map[string]bool{"b.org": true, "c.org": true}, nil)
+		map[string]bool{"a.org": true, "b.org": true, "c.org": true}, nil)
 
 	roots := map[string]string{"a.org": "*"}
 	addCompanions(roots)
@@ -105,11 +105,26 @@ func TestCompanionsOfCompanionsAreNotFollowed(t *testing.T) {
 func TestCompanionDoesNotOverwriteAnAskedForConstraint(t *testing.T) {
 	stubCompanions(t,
 		map[string]map[string]string{"a.org": {"b.org": "*"}},
-		map[string]bool{"b.org": true}, nil)
+		map[string]bool{"a.org": true, "b.org": true}, nil)
 
 	roots := map[string]string{"a.org": "*", "b.org": "^2"}
 	addCompanions(roots)
 	if roots["b.org"] != "^2" {
 		t.Errorf("b.org = %q, want the caller's ^2", roots["b.org"])
+	}
+}
+
+// A root that is not a project at all — `pkgx ./x.py` — must not be reported as
+// a companions problem. The resolver rejects the name properly a moment later;
+// leading with "could not read ./x.py's companions" blames the wrong thing.
+func TestUnresolvableRootIsSilentHere(t *testing.T) {
+	stubCompanions(t, nil, map[string]bool{}, map[string]error{"./x.py": errors.New("Not Found")})
+	var warned []string
+	bottle.Warn = func(m string) { warned = append(warned, m) }
+
+	roots := map[string]string{"./x.py": "*"}
+	addCompanions(roots)
+	if len(warned) != 0 {
+		t.Errorf("warned about a name that is not a project: %v", warned)
 	}
 }
