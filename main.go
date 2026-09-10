@@ -78,6 +78,12 @@ var configError = bottle.ConfigError
 // test can observe the call without writing to the host's /lib.
 var setupRootfs = bottle.SetupScratchRootfs
 
+// companionsFor and pickVersionFor are the two questions addCompanions asks of
+// the pantry and the registry; vars so a test can answer them without a
+// network.
+var companionsFor = bottle.CompanionsFor
+var pickVersionFor = bottle.PickVersionFor
+
 // run is the testable entry point; it returns the process exit code.
 func run(argv []string) int {
 	// A closure the resolver could not complete is not an error here — it is an
@@ -232,6 +238,8 @@ func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 	}
 
 	// Materialise every requested package's complete FROM-scratch closure.
+	addCompanions(roots)
+
 	closure, err := bottle.CompleteClosure(roots, dir)
 	if err != nil {
 		return err
@@ -639,6 +647,52 @@ func writeModulefile(c composed, stdout io.Writer) error {
 	return nil
 }
 
+// addCompanions grows a root set with what each named root SUGGESTS belongs
+// beside it.
+//
+// A companion is not a dependency: nothing links against it and the package
+// works without it. It is what the recipe says belongs in the same environment,
+// and some packages are unusable without theirs — rust-lang.org ships
+// bin/cargo-clippy and bin/cargo-fmt and NO `cargo`, because cargo is the
+// separate rust-lang.org/cargo project it names in `companions:`. A recipe that
+// declares rust-lang.org and then runs `cargo` is correct against upstream pkgx
+// and used to die here with `"cargo": executable file not found in $PATH`
+// (go-pkgx/bottle#65). 74 of the pantry's 1899 recipes declare the key.
+//
+// NAMED roots only, deliberately. Following companions of the whole resolved
+// closure would widen every environment by whatever its transitive dependencies
+// happen to SUGGEST, and a suggestion is not a requirement. For the same reason
+// a companion's own companions are not followed: the snapshot is taken before
+// the loop.
+//
+// Two failures, treated differently on purpose, because conflating them is the
+// defect this fixes. A companion with no bottle for this platform is an ANSWER
+// — we looked, there is nothing to install — and is skipped in silence. Failing
+// to READ the recipe is not an answer, and says so.
+func addCompanions(roots map[string]string) {
+	osn, arch := bottle.HostSlug()
+	named := make([]string, 0, len(roots))
+	for p := range roots {
+		named = append(named, p)
+	}
+	for _, p := range named {
+		comps, err := companionsFor(p, osn, arch)
+		if err != nil {
+			bottle.Warn(fmt.Sprintf("could not read %s's companions: %v", p, err))
+			continue
+		}
+		for c, want := range comps {
+			if _, have := roots[c]; have {
+				continue
+			}
+			if _, err := pickVersionFor(c, want, osn, arch); err != nil {
+				continue
+			}
+			roots[c] = want
+		}
+	}
+}
+
 // composeSpecs resolves a package set and returns what it contributes to the
 // environment. It is the module front-end's one entry into the resolver, so
 // `pkge load` and `eval "$(pkgx +…)"` cannot disagree about a closure.
@@ -649,6 +703,7 @@ func composeSpecs(specs []string) (composed, error) {
 	for _, p := range expandSpecs(specs, envs) {
 		roots[project(p)] = constraint(p)
 	}
+	addCompanions(roots)
 	closure, err := bottle.CompleteClosure(roots, dir)
 	if err != nil {
 		return composed{}, err
