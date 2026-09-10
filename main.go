@@ -676,6 +676,15 @@ func addCompanions(roots map[string]string) {
 		named = append(named, p)
 	}
 	for _, p := range named {
+		// Ask about a package's companions only once the package itself is real.
+		// Otherwise `pkgx ./x.py` — which is not a project at all — leads with
+		//   pkgx: could not read ./x.py's companions: … Not Found
+		// and blames companions for a name the resolver is about to reject
+		// properly one line later. A root that does not resolve is the
+		// resolver's to report, not this function's.
+		if _, err := pickVersionFor(p, roots[p], osn, arch); err != nil {
+			continue
+		}
 		comps, err := companionsFor(p, osn, arch)
 		if err != nil {
 			bottle.Warn(fmt.Sprintf("could not read %s's companions: %v", p, err))
