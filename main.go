@@ -279,11 +279,31 @@ func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 	return runELF(binPath, args, env, libPath, dir)
 }
 
-// runEnv builds the child environment. On linux/darwin the closure's shared
-// libraries are found via $LD_LIBRARY_PATH (and PATH carries the bin dirs). On
-// Windows there is no LD_LIBRARY_PATH: the loader resolves DLLs from the exe's
-// own directory and from PATH, so PATH must carry BOTH the bin and lib dirs,
-// joined with the OS-native list separator (";", not ":").
+// runEnv builds the child environment.
+//
+// On LINUX the closure's shared libraries are found via $LD_LIBRARY_PATH (and
+// PATH carries the bin dirs).
+//
+// On DARWIN they are not. dyld does not read LD_LIBRARY_PATH — it reads
+// DYLD_LIBRARY_PATH — so the variable set here is inert there. Measured:
+//
+//	$ ./prog                              # @rpath/libanswer.dylib, no LC_RPATH
+//	dyld: Library not loaded: @rpath/libanswer.dylib
+//	$ LD_LIBRARY_PATH=$PWD/lib ./prog     # unchanged
+//	dyld: Library not loaded: @rpath/libanswer.dylib
+//	$ DYLD_LIBRARY_PATH=$PWD/lib ./prog
+//	42
+//
+// So on darwin a bottle's own rpaths are the ONLY mechanism: there is no
+// environment fallback behind them. That is why an unresolvable @rpath there
+// is fatal rather than merely untidy, and why go-pkgx/bk#125 had to repair the
+// bottles instead of widening a search path. Setting DYLD_LIBRARY_PATH would
+// paper over exactly the defect that campaign exists to find, and SIP strips
+// DYLD_* when exec'ing a protected binary in any case.
+//
+// On WINDOWS there is no LD_LIBRARY_PATH either: the loader resolves DLLs from
+// the exe's own directory and from PATH, so PATH must carry BOTH the bin and
+// lib dirs, joined with the OS-native list separator (";", not ":").
 func runEnv(binDirs []string, closure []bottle.Resolved, dir, libPath string) []string {
 	env := os.Environ()
 	if bottle.GOOS() == "windows" {
