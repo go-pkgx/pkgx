@@ -275,7 +275,18 @@ func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 		return err
 	}
 
-	env := runEnv(binDirs, closure, dir, libPath)
+	// The child gets the CLOSURE's bin dirs, not just the roots'. The two
+	// questions are different and were sharing one answer: which directories to
+	// search for the program the user NAMED (the roots — `+foo -- bar` should
+	// not find a tool some transitive dependency happens to ship), and what
+	// PATH the program then runs with (everything its closure installed).
+	//
+	// yt-dlp is a python script whose shebang reads `#!/usr/bin/env python`. It
+	// has python in its closure and got `env: python: No such file or directory`,
+	// because only yt-dlp's own bin was on PATH. `pkgx +yt-dlp.org` with no
+	// command already printed the full closure PATH — the run form simply
+	// composed a different one.
+	env := runEnv(closure, dir, libPath)
 	return runELF(binPath, args, env, libPath, dir)
 }
 
@@ -304,17 +315,115 @@ func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 // On WINDOWS there is no LD_LIBRARY_PATH either: the loader resolves DLLs from
 // the exe's own directory and from PATH, so PATH must carry BOTH the bin and
 // lib dirs, joined with the OS-native list separator (";", not ":").
-func runEnv(binDirs []string, closure []bottle.Resolved, dir, libPath string) []string {
+func runEnv(closure []bottle.Resolved, dir, libPath string) []string {
 	env := os.Environ()
-	if bottle.GOOS() == "windows" {
-		sep := string(os.PathListSeparator)
-		parts := append(append([]string{}, binDirs...), bottle.LibDirs(closure, dir)...)
-		return append(env, "PATH="+strings.Join(parts, sep)+sep+os.Getenv("PATH"))
+	for _, e := range composeEnv(closure, dir).Env {
+		switch {
+		case e.Unset:
+			env = unsetEnv(env, e.Name)
+		case len(e.Prepend) > 0:
+			env = setEnv(env, e.Name, joinEnv(strings.Join(e.Prepend, ":"), getEnv(env, e.Name)))
+		case len(e.Append) > 0:
+			env = setEnv(env, e.Name, joinEnv(getEnv(env, e.Name), strings.Join(e.Append, ":")))
+		default:
+			env = setEnv(env, e.Name, expandEnv(e.Value, env))
+		}
 	}
-	return append(env,
-		"LD_LIBRARY_PATH="+libPath,
-		"PATH="+strings.Join(binDirs, ":")+":"+os.Getenv("PATH"),
-	)
+	if bottle.GOOS() == "windows" {
+		// Windows has no LD_LIBRARY_PATH: the loader resolves DLLs from the exe's
+		// own directory and from PATH, so the lib dirs have to travel on PATH,
+		// joined with the OS-native separator.
+		sep := string(os.PathListSeparator)
+		env = setEnv(env, "PATH", strings.Join(bottle.LibDirs(closure, dir), sep)+sep+getEnv(env, "PATH"))
+	}
+	return env
+}
+
+// expandEnv resolves $VAR and ${VAR} against the block being built.
+//
+// A recipe's `runtime: env:` chains onto what the caller already had —
+// help2man declares
+//
+//	PERL5LIB: "{{prefix}}/lib/perl5:$PERL5LIB"
+//
+// and bottle keeps that `$PERL5LIB` verbatim, because the SHELL expands it in
+// `eval "$(pkgx +…)"`. There is no shell in the run form: exec hands the block
+// to the program as it stands, so an unexpanded value arrives as the literal
+// characters `$PERL5LIB` on the end of a path list. Measured on yt-dlp, whose
+// PYTHONPATH reached python as `…/site-packages:$PYTHONPATH`.
+func expandEnv(value string, env []string) string {
+	return os.Expand(value, func(name string) string { return getEnv(env, name) })
+}
+
+// joinEnv joins two path-list halves, dropping an empty one so the result never
+// carries a stray separator — a leading or trailing ":" is an empty PATH entry,
+// which means "the current directory" to some tools.
+func joinEnv(a, b string) string {
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	}
+	return a + ":" + b
+}
+
+// getEnv reads a name out of an env slice rather than the process's own
+// environment: runEnv is building a block, and what matters is what it has put
+// there so far.
+func getEnv(env []string, name string) string {
+	prefix := name + "="
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			return e[len(prefix):]
+		}
+	}
+	return ""
+}
+
+// unsetEnv removes every entry for name.
+func unsetEnv(env []string, name string) []string {
+	prefix := name + "="
+	out := env[:0]
+	for _, e := range env {
+		if !strings.HasPrefix(e, prefix) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// setEnv REPLACES name in env, or appends it when absent.
+//
+// Appending was not enough, and the way it failed is worth keeping. os.Environ()
+// already carries the caller's PATH, and Exec is syscall.Exec — execve(2) hands
+// the block over verbatim, duplicates included, and getenv answers with the
+// FIRST match. So a second `PATH=` at the end was present in the child's
+// environment and never consulted: the closure's bin dirs were shipped and
+// ignored.
+//
+// It was invisible from the inside, because it only affects variables the
+// CALLER already has. LD_LIBRARY_PATH is normally unset, so its appended copy
+// won and the mechanism looked like it worked. PATH is never unset, so it never
+// did.
+//
+// What that costs: anything the program then looks up BY NAME comes from the
+// host. yt-dlp is a python script whose shebang reads `#!/usr/bin/env python`,
+// and with python 3.11 in its own closure it died with
+//
+//	env: python: No such file or directory
+//
+// A compiled program that shells out is worse off still — it finds the host's
+// tool rather than the one the closure installed, silently.
+func setEnv(env []string, name, value string) []string {
+	prefix := name + "="
+	for i, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
 }
 
 // resolveBin finds the absolute path of the binary to exec: a project's primary
