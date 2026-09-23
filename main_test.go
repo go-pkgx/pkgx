@@ -646,3 +646,21 @@ func TestRunEnvCarriesTheWholeClosure(t *testing.T) {
 		t.Errorf("PATH appears %d times, want 1", n)
 	}
 }
+
+// versionOf reads a project's resolved version out of the closure, so a recipe
+// that names its binary after its own version can be looked up.
+// apache.org/apr-util provides only `bin/apu-{{ version.major }}-config`.
+func TestVersionOfReadsTheClosure(t *testing.T) {
+	closure := []bottle.Resolved{
+		{Project: "a.org", Version: bottle.Ver{Raw: "1.2.3"}},
+		{Project: "apache.org/apr-util", Version: bottle.Ver{Raw: "1.6.5"}},
+	}
+	if got := versionOf("apache.org/apr-util", closure); got != "1.6.5" {
+		t.Errorf("versionOf = %q, want 1.6.5", got)
+	}
+	// absent: empty, which leaves BinNames verbatim rather than expanding a
+	// placeholder against nothing
+	if got := versionOf("nobody.org", closure); got != "" {
+		t.Errorf("versionOf(absent) = %q, want empty", got)
+	}
+}

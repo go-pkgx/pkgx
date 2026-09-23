@@ -426,6 +426,19 @@ func setEnv(env []string, name, value string) []string {
 	return append(env, prefix+value)
 }
 
+// versionOf reads a project's resolved version out of the closure. Empty when
+// the project is not there, which leaves BinNames verbatim — the same answer as
+// before, for a case that cannot arise here since the closure is what put the
+// prefix on disk.
+func versionOf(project string, closure []bottle.Resolved) string {
+	for _, r := range closure {
+		if r.Project == project {
+			return r.Version.Raw
+		}
+	}
+	return ""
+}
+
 // resolveBin finds the absolute path of the binary to exec: a project's primary
 // program (runProject set), or a named program looked up across binDirs. The
 // result is passed through bottle.ResolveBinPath so a Windows lookup lands on
@@ -437,7 +450,13 @@ func resolveBin(runProject, program string, binDirs []string, closure []bottle.R
 			return "", err
 		}
 		prefix := bottle.PrefixOf(runProject, closure, dir)
-		return bottle.ResolveBinPath(filepath.Join(prefix, "bin", bottle.PrimaryBin(runProject, provides))), nil
+		// The version, because a recipe may name its binary after it —
+		// apache.org/apr-util provides only `bin/apu-{{ version.major }}-config`,
+		// and without the version that name is looked up with the moustache
+		// still in it. go-pkgx/bottle#75 taught BinNames to expand; this is the
+		// caller that has the version to expand WITH.
+		return bottle.ResolveBinPath(filepath.Join(prefix, "bin",
+			bottle.PrimaryBinFor(runProject, provides, versionOf(runProject, closure)))), nil
 	}
 	// An explicit path runs as itself — `pkgx +gnu.org/glibc -- /usr/local/bin/bk`
 	// brings the packages into the environment for a program that is NOT one of
