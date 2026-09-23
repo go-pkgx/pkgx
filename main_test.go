@@ -521,3 +521,128 @@ func TestEnvVerb(t *testing.T) {
 		t.Errorf("`pkgx env init` = %d, want 0", code)
 	}
 }
+
+// The run form's environment must REPLACE what the caller had, not sit behind
+// it. Exec is syscall.Exec — execve(2) passes the block verbatim, duplicates
+// included, and getenv answers with the FIRST match. Appending a second
+// `PATH=` therefore shipped the closure's bin dirs and never let anything use
+// them.
+//
+// It hid because it only affects variables the caller already has.
+// LD_LIBRARY_PATH is normally unset, so its appended copy won and the mechanism
+// looked like it worked; PATH is never unset, so it never did.
+func TestSetEnvReplacesRatherThanAppends(t *testing.T) {
+	env := []string{"PATH=/usr/bin:/bin", "HOME=/h"}
+	got := setEnv(env, "PATH", "/pkgx/bin:/usr/bin:/bin")
+	n := 0
+	for _, e := range got {
+		if strings.HasPrefix(e, "PATH=") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("PATH appears %d times, want 1 — a duplicate is resolved by execve, not by us", n)
+	}
+	if v := getEnv(got, "PATH"); v != "/pkgx/bin:/usr/bin:/bin" {
+		t.Errorf("PATH = %q, want the replacement", v)
+	}
+	if v := getEnv(got, "HOME"); v != "/h" {
+		t.Errorf("HOME = %q, want it untouched", v)
+	}
+	// absent: appended
+	got = setEnv(got, "NEW", "x")
+	if v := getEnv(got, "NEW"); v != "x" {
+		t.Errorf("NEW = %q, want x", v)
+	}
+}
+
+// A recipe's `runtime: env:` chains onto what the caller had — help2man writes
+// `PERL5LIB: "{{prefix}}/lib/perl5:$PERL5LIB"` — and bottle keeps the `$VAR`
+// verbatim because the SHELL expands it in `eval "$(pkgx +…)"`. There is no
+// shell in the run form, so it has to expand them itself; otherwise the literal
+// characters `$PERL5LIB` arrive at the end of a path list, which is what
+// yt-dlp's PYTHONPATH looked like.
+func TestRunEnvExpandsAShellChain(t *testing.T) {
+	env := []string{"PYTHONPATH=/caller/site-packages"}
+	if got := expandEnv("/pkg/site-packages:$PYTHONPATH", env); got != "/pkg/site-packages:/caller/site-packages" {
+		t.Errorf("expandEnv = %q", got)
+	}
+	// ${BRACED} too, and an unset name becomes empty rather than literal
+	if got := expandEnv("${PYTHONPATH}", env); got != "/caller/site-packages" {
+		t.Errorf("braced = %q", got)
+	}
+	if got := expandEnv("a:$NOPE", env); got != "a:" {
+		t.Errorf("unset = %q, want the name gone", got)
+	}
+}
+
+// joinEnv must not leave a stray separator: a leading or trailing ":" in PATH
+// is an empty entry, which several tools read as "the current directory".
+func TestJoinEnvDropsAnEmptyHalf(t *testing.T) {
+	for _, c := range []struct{ a, b, want string }{
+		{"x", "y", "x:y"},
+		{"", "y", "y"},
+		{"x", "", "x"},
+		{"", "", ""},
+	} {
+		if got := joinEnv(c.a, c.b); got != c.want {
+			t.Errorf("joinEnv(%q,%q) = %q, want %q", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+// unsetEnv removes every entry for the name — a modulefile that unsets a
+// variable means the tool below must not see it, and one leftover copy would
+// be exactly what execve hands over.
+func TestUnsetEnvRemovesEveryCopy(t *testing.T) {
+	got := unsetEnv([]string{"A=1", "B=2", "A=3"}, "A")
+	for _, e := range got {
+		if strings.HasPrefix(e, "A=") {
+			t.Errorf("A survived: %v", got)
+		}
+	}
+	if getEnv(got, "B") != "2" {
+		t.Errorf("B = %q, want 2", getEnv(got, "B"))
+	}
+}
+
+// The child gets the CLOSURE's bin dirs, and the caller's PATH survives behind
+// them. Before this, the run form put only the ROOTS' bin dirs on PATH — the
+// packages the user typed — so a program that looks up its own interpreter by
+// name could not find it. yt-dlp is a python script whose shebang reads
+// `#!/usr/bin/env python`; with python in its own closure it died with
+// `env: python: No such file or directory`.
+func TestRunEnvCarriesTheWholeClosure(t *testing.T) {
+	dir := t.TempDir()
+	closure := []bottle.Resolved{
+		{Project: "a.org", Version: bottle.Ver{Raw: "1.0.0"}},
+		{Project: "b.org/dep", Version: bottle.Ver{Raw: "2.0.0"}},
+	}
+	for _, r := range closure {
+		if err := os.MkdirAll(filepath.Join(dir, r.Project, "v"+r.Version.Raw, "bin"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", "/caller/bin")
+
+	env := runEnv(closure, dir, "")
+	got := getEnv(env, "PATH")
+	for _, r := range closure {
+		want := filepath.Join(dir, r.Project, "v"+r.Version.Raw, "bin")
+		if !strings.Contains(got, want) {
+			t.Errorf("PATH lacks %s:\n%s", want, got)
+		}
+	}
+	if !strings.Contains(got, "/caller/bin") {
+		t.Errorf("PATH dropped the caller's own entries:\n%s", got)
+	}
+	n := 0
+	for _, e := range env {
+		if strings.HasPrefix(e, "PATH=") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("PATH appears %d times, want 1", n)
+	}
+}
