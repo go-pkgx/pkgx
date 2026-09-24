@@ -43,6 +43,9 @@ usage:
                                      that composes it (see --modulefile)
   pkgx --modulefile +<pkg>...        the same environment as an Lmod modulefile,
                                      so an HPC site keeps its module command
+  pkgx --graph +<pkg>...             the resolved dependency graph: every
+                                     version, and which demand decided it.
+                                     Resolves only — nothing is downloaded
   pkgx env init [--module]           print the pkge shell function, for
                                      eval "$(pkgx env init)" in a profile:
                                      pkge load|unload|purge|list|save|restore
@@ -203,6 +206,7 @@ const (
 	formatShell      outputFormat = iota // export lines, for eval "$(pkgx +a)"
 	formatJSON                           // the composed environment as data
 	formatModulefile                     // an Lmod modulefile (Lua)
+	formatGraph                          // the resolved dependency graph, for a person
 )
 
 // splitFormat pulls a leading --json / --modulefile off the argument list.
@@ -215,6 +219,8 @@ func splitFormat(argv []string) (outputFormat, []string) {
 		return formatJSON, argv[1:]
 	case "--modulefile":
 		return formatModulefile, argv[1:]
+	case "--graph":
+		return formatGraph, argv[1:]
 	}
 	return formatShell, argv
 }
@@ -274,6 +280,13 @@ func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 
 	// Materialise every requested package's complete FROM-scratch closure.
 	addCompanions(roots)
+
+	// --graph resolves and stops. Nothing is downloaded: the question is what
+	// this set WOULD be, which is worth asking before committing a disk to it,
+	// and worth asking about a closure that will not resolve at all.
+	if format == formatGraph {
+		return printGraph(roots, stdout)
+	}
 
 	closure, err := bottle.CompleteClosure(roots, dir)
 	if err != nil {
