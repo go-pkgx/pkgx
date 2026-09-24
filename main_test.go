@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -662,5 +663,68 @@ func TestVersionOfReadsTheClosure(t *testing.T) {
 	// placeholder against nothing
 	if got := versionOf("nobody.org", closure); got != "" {
 		t.Errorf("versionOf(absent) = %q, want empty", got)
+	}
+}
+
+// captureStdout runs f with os.Stdout replaced by a pipe and returns what it
+// wrote. `run` writes the eval contract to the real os.Stdout, so testing that
+// contract means intercepting it.
+func captureStdout(t *testing.T, f func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	f()
+	os.Stdout = old
+	_ = w.Close()
+	out := <-done
+	_ = r.Close()
+	return out
+}
+
+// TestEvalFormFailsTheShell: `eval "$(pkgx +a +b)"` must not succeed when the
+// resolution did not.
+//
+// A command substitution DISCARDS the exit status of what it ran, so the shell
+// only sees `eval` of what reached stdout. With the diagnostic correctly on
+// stderr, that used to be `eval ""` — which succeeds, leaving a script to carry
+// on as though the packages were loaded. The idiom is the one this program's
+// own --help recommends.
+func TestEvalFormFailsTheShell(t *testing.T) {
+	t.Setenv("PKGX_DIR", t.TempDir())
+	fakePantry(t, map[string]string{}) // every project 404s: resolution fails
+	var rc int
+	out := captureStdout(t, func() { rc = run([]string{"+acme.org/absent"}) })
+	if rc != 1 {
+		t.Errorf("exit = %d, want 1", rc)
+	}
+	// `false` is what makes `eval` non-zero. Anything else on stdout would be
+	// evaluated by the caller's shell.
+	if out != "false\n" {
+		t.Errorf("stdout = %q, want %q", out, "false\n")
+	}
+}
+
+// TestJSONFormGetsNoShellKeyword: --json and --modulefile are data. A shell
+// keyword in them would be a different kind of lie — a consumer parsing the
+// output would choke on it rather than see a failure.
+func TestJSONFormGetsNoShellKeyword(t *testing.T) {
+	t.Setenv("PKGX_DIR", t.TempDir())
+	fakePantry(t, map[string]string{})
+	var rc int
+	out := captureStdout(t, func() { rc = run([]string{"--json", "+acme.org/absent"}) })
+	if rc != 1 {
+		t.Errorf("exit = %d, want 1", rc)
+	}
+	if out != "" {
+		t.Errorf("stdout = %q, want empty", out)
 	}
 }

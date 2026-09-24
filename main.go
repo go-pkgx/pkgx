@@ -12,6 +12,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -152,9 +153,43 @@ func run(argv []string) int {
 		fmt.Fprintln(os.Stderr, "pkgx: --json and --modulefile describe a package set: give +pkg and no command")
 		return 2
 	}
-	if err := exec(plus, rest, format, os.Stdout); err != nil {
+	// `pkgx +a +b` with no command is consumed as `eval "$(pkgx +a +b)"` — the
+	// idiom this program's own --help recommends. A command substitution
+	// DISCARDS the exit status of what it ran, so the shell only ever sees
+	// `eval` of whatever reached stdout. With an error that left stdout empty,
+	// that is `eval ""`, which SUCCEEDS:
+	//
+	//	$ eval "$(pkgx +gnome.org/glib +freedesktop.org/fontconfig)"; echo $?
+	//	pkgx: no version of gnu.org/gettext satisfies "^1" AND "^0.21" …
+	//	0
+	//
+	// The diagnostic is on stderr where it belongs and cannot corrupt the
+	// capture, but the script carries on as though the packages were loaded.
+	// (`pkge load` does not have this problem: the shell function it installs
+	// captures to a variable and checks with `|| return $?` before eval'ing.)
+	//
+	// So the output of that form is buffered and released only on success, and
+	// a failure puts `false` on stdout instead. The contract becomes: either
+	// the complete environment, or nothing that changes the shell and a
+	// non-zero status. A partially applied environment was possible before and
+	// is the worse of the two failures — it looks like it worked.
+	describing := len(plus) > 0 && len(rest) == 0
+	out := io.Writer(os.Stdout)
+	var held bytes.Buffer
+	if describing {
+		out = &held
+	}
+	if err := exec(plus, rest, format, out); err != nil {
 		fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
+		// Only the shell rendering gets `false`: --json and --modulefile are
+		// data, and a shell keyword in them would be a different kind of lie.
+		if describing && format == formatShell {
+			fmt.Fprintln(os.Stdout, "false")
+		}
 		return 1
+	}
+	if describing {
+		_, _ = os.Stdout.Write(held.Bytes())
 	}
 	return 0
 }
