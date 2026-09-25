@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/go-pkgx/bottle"
 )
@@ -44,7 +45,7 @@ func printTree(g *bottle.Graph, stdout io.Writer) {
 		case !last:
 			branch, cont = "├─ ", "│  "
 		}
-		line := p + " " + g.Versions[p].Raw
+		line := p + " " + versionLabel(g, p)
 		// A project already shown is named and not descended into: the closure
 		// is a DAG, and expanding every path through a diamond turns a readable
 		// tree into pages of the same subtree. A leaf repeats, because ↑ on it
@@ -93,7 +94,7 @@ func printContested(g *bottle.Graph, stdout io.Writer) {
 	sort.Slice(rows, func(i, j int) bool { return rows[i].project < rows[j].project })
 	fmt.Fprintf(stdout, "\ndecided by more than one demand:\n")
 	for _, r := range rows {
-		fmt.Fprintf(stdout, "  %s %s\n", r.project, g.Versions[r.project].Raw)
+		fmt.Fprintf(stdout, "  %s %s\n", r.project, versionLabel(g, r.project))
 		asks := append([]bottle.Edge(nil), r.asks...)
 		sort.Slice(asks, func(i, j int) bool { return asks[i].Of < asks[j].Of })
 		for _, e := range asks {
@@ -108,4 +109,23 @@ func printContested(g *bottle.Graph, stdout io.Writer) {
 			fmt.Fprintf(stdout, "      %-12s ← %s\n", c, who)
 		}
 	}
+}
+
+// versionLabel is the version a project resolved to, or ALL of them where the
+// demands did not intersect but named disjoint sonames.
+//
+// A graph that printed one version there would be worse than silent: it would
+// answer the question "which libxml2 is in this closure" with a half-truth,
+// and the whole point of the split is that the answer is two. The leading line
+// comes first — it is the one that owns PATH.
+func versionLabel(g *bottle.Graph, p string) string {
+	lines := g.Lines[p]
+	if len(lines) < 2 {
+		return g.Versions[p].Raw
+	}
+	var raws []string
+	for _, v := range lines {
+		raws = append(raws, v.Raw)
+	}
+	return strings.Join(raws, " + ") + "  (ABI lines, both installed)"
 }

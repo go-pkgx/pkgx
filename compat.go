@@ -166,6 +166,21 @@ func printCompat(pins map[string]string, r compatResult, stdout io.Writer) {
 		}
 	}
 
+	if r.refused > 0 {
+		// Named, like the unreadable ones above, and for the same reason. The
+		// blame below says which PROJECT the demands collided on; it does not
+		// say which recipes were excluded, and "2 refused" sends an operator
+		// to work that out by hand. Measured while checking whether a resolver
+		// change had fixed the refusals it was written for: the counts moved
+		// and there was no way to tell which two recipes had moved with them.
+		fmt.Fprintf(stdout, "  refused:\n")
+		for _, o := range r.outcomes {
+			if o.conflict != nil {
+				fmt.Fprintf(stdout, "      %s: %s\n", o.project, o.conflict.Project)
+			}
+		}
+	}
+
 	// project -> how many recipes it excluded, and the demands seen on it
 	type blame struct {
 		n       int
