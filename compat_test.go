@@ -108,6 +108,9 @@ func TestPrintCompatSeparatesErrorsFromRefusals(t *testing.T) {
 		outcomes: []outcome{{project: "x.org", err: bytes.ErrTooLarge}},
 		errored:  1,
 	}, &b)
+	if !strings.Contains(b.String(), "x.org") {
+		t.Errorf("the unreadable project was not named:\n%s", b.String())
+	}
 	if !strings.Contains(b.String(), "1 could not be read at all") {
 		t.Errorf("an unreadable project was not distinguished:\n%s", b.String())
 	}

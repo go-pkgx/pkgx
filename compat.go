@@ -153,7 +153,17 @@ func printCompat(pins map[string]string, r compatResult, stdout io.Writer) {
 	total := len(r.outcomes)
 	fmt.Fprintf(stdout, "  %d recipes\n  %d resolve\n  %d refused\n", total, r.resolved, r.refused)
 	if r.errored > 0 {
-		fmt.Fprintf(stdout, "  %d could not be read at all\n", r.errored)
+		// Named, not counted. A project that failed for a reason OTHER than a
+		// conflict is the one an operator has to go and look at, and "1 could
+		// not be read at all" sends them to find out which — measured while
+		// chasing a regression, where the unnamed one turned out to be a
+		// pre-existing failure and not the one being hunted.
+		fmt.Fprintf(stdout, "  %d could not be read at all:\n", r.errored)
+		for _, o := range r.outcomes {
+			if o.err != nil {
+				fmt.Fprintf(stdout, "      %s: %v\n", o.project, o.err)
+			}
+		}
 	}
 
 	// project -> how many recipes it excluded, and the demands seen on it
