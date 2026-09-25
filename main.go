@@ -46,6 +46,9 @@ usage:
   pkgx --graph +<pkg>...             the resolved dependency graph: every
                                      version, and which demand decided it.
                                      Resolves only — nothing is downloaded
+  pkgx compat +<pin>... -- <pkg>...  how much of a package set resolves under
+                                     those base versions, and what each refusal
+                                     blames. Projects on stdin when none given
   pkgx env init [--module]           print the pkge shell function, for
                                      eval "$(pkgx env init)" in a profile:
                                      pkge load|unload|purge|list|save|restore
@@ -102,6 +105,16 @@ func run(argv []string) int {
 		return 2
 	}
 	switch argv[0] {
+	case "compat":
+		// How far does a chosen base reach? See runCompat.
+		plus, rest := splitPlus(argv[1:])
+		if err := runCompat(plus, rest, os.Stdin, os.Stdout); err != nil {
+			if err != errSilent {
+				fmt.Fprintln(os.Stderr, "pkgx:", err)
+			}
+			return 1
+		}
+		return 0
 	case "-h", "--help":
 		fmt.Print(usage)
 		return 0
