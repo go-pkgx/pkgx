@@ -160,3 +160,31 @@ func TestPrintContestedShowsAnEmptyConstraintAsStar(t *testing.T) {
 		t.Errorf("an empty constraint was not shown as *:\n%s", b.String())
 	}
 }
+
+// A project the resolver split onto two ABI lines must be printed as two. One
+// version there would answer "which libxml2 is in this closure" with a
+// half-truth, and the whole point of the split is that the answer is two.
+func TestVersionLabelNamesBothABILines(t *testing.T) {
+	g := &bottle.Graph{
+		Versions: map[string]bottle.Ver{
+			"gnome.org/libxml2": bottle.ParseVer("2.15.4"),
+			"zlib.net":          bottle.ParseVer("1.3.2"),
+		},
+		Lines: map[string][]bottle.Ver{
+			"gnome.org/libxml2": {bottle.ParseVer("2.15.4"), bottle.ParseVer("2.13.9")},
+		},
+	}
+	got := versionLabel(g, "gnome.org/libxml2")
+	if !strings.Contains(got, "2.15.4") || !strings.Contains(got, "2.13.9") {
+		t.Errorf("label = %q, want both lines", got)
+	}
+	// The leading line comes first: it is the one that owns PATH.
+	if strings.Index(got, "2.15.4") > strings.Index(got, "2.13.9") {
+		t.Errorf("label = %q, want the newest line first", got)
+	}
+	// A project with one version is unchanged — no parenthetical noise on the
+	// overwhelming majority of rows.
+	if got := versionLabel(g, "zlib.net"); got != "1.3.2" {
+		t.Errorf("label = %q, want a bare version", got)
+	}
+}

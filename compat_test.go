@@ -77,6 +77,13 @@ func TestPrintCompatAttributesTheRefusals(t *testing.T) {
 	if !strings.Contains(out, "   2  gnome.org/libxml2") {
 		t.Errorf("the count per project is missing:\n%s", out)
 	}
+	// The refused RECIPES are named, not only the project the demands
+	// collided on: a count sends an operator to work out which ones by hand.
+	for _, want := range []string{"a.org: gnome.org/libxml2", "b.org: gnome.org/libxml2", "c.org: unicode.org"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the refused recipe %q is not named:\n%s", want, out)
+		}
+	}
 	// Every distinct demand is shown once, whoever made it.
 	for _, want := range []string{"~2.13 (gnu.org/gettext)", "2 (freedesktop.org/fontconfig)", ">=2.14 (requested)"} {
 		if !strings.Contains(out, want) {
