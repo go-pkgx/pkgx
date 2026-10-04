@@ -730,44 +730,76 @@ func TestJSONFormGetsNoShellKeyword(t *testing.T) {
 }
 
 // glibc's bottle puts its libraries in a VERSIONED subdirectory — libc.so.6
-// lives in lib/glibc-2.44/, and lib/ holds nothing else. The eval's
-// LD_LIBRARY_PATH must name the subdirectory, or it exports a directory with
-// no shared object in it.
+// lives in lib/glibc-2.44/, and lib/ holds nothing else. Whether that
+// directory belongs on the exported LD_LIBRARY_PATH depends on WHOSE LOADER
+// will read it, and both answers are defects when given to the wrong tree.
 //
-// On a distribution that is invisible: the host libc.so.6 is found whatever
-// LD_LIBRARY_PATH says. In a FROM-scratch tree there is nothing behind it, and
-// go-pkgx/bk#272 is what that costs — the sovereign rootfs died on the first
-// command of every build,
+//   - In a FROM-scratch tree the loader is ours, there is no system libc
+//     behind it, and omitting the directory killed every sovereign build on
+//     its first `mkdir` (go-pkgx/bk#272).
+//   - On a distribution the child's PT_INTERP names the HOST's ld.so, and
+//     pairing it with OUR libc.so.6 breaks a private contract between the two
+//     halves of one glibc:
+//     `undefined symbol: __pointer_chk_guard, version GLIBC_PRIVATE`.
+//     That is what an unconditional include did to the s390x seed lane.
 //
-//	mkdir: error while loading shared libraries: libc.so.6
-//
-// on two recipes that have no dependencies at all.
-//
-// `pkgx -- cmd` was already right, because it asks bottle.LibDirs. This is the
-// same fact encoded twice; the test is here so the eval half cannot drift
-// again.
-func TestEnvModeNamesGlibcsVersionedLibDir(t *testing.T) {
+// So the branch is exercised both ways through the seam, and the second case
+// matters at least as much as the first.
+func TestEnvModeGlibcLibDirFollowsTheLoader(t *testing.T) {
 	dir := t.TempDir()
-	// The real layout: lib/ contains ONLY the versioned subdirectory.
 	if err := os.MkdirAll(filepath.Join(dir, bottle.GlibcProject, "v2.44.0", "lib", "glibc-2.44"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	closure := []bottle.Resolved{{Project: bottle.GlibcProject, Version: bottle.ParseVer("2.44.0")}}
-
-	var out strings.Builder
-	if err := envMode(closure, dir, formatShell, &out); err != nil {
-		t.Fatal(err)
-	}
-	got := out.String()
 	sub := filepath.Join(dir, bottle.GlibcProject, "v2.44.0", "lib", "glibc-2.44")
-	if !strings.Contains(got, sub) {
-		t.Errorf("LD_LIBRARY_PATH does not name %s:\n%s", sub, got)
-	}
-	// And it must agree with what `pkgx -- cmd` computes, which is the point
-	// of calling the one function rather than keeping a second rule.
-	for _, d := range bottle.LibDirs(closure, dir) {
-		if !strings.Contains(got, d) {
-			t.Errorf("the eval omits %s, which bottle.LibDirs includes:\n%s", d, got)
+
+	old := loaderIsOurs
+	t.Cleanup(func() { loaderIsOurs = old })
+
+	t.Run("our loader: the versioned dir is exported", func(t *testing.T) {
+		loaderIsOurs = func(string) bool { return true }
+		var out strings.Builder
+		if err := envMode(closure, dir, formatShell, &out); err != nil {
+			t.Fatal(err)
 		}
+		if !strings.Contains(out.String(), sub) {
+			t.Errorf("LD_LIBRARY_PATH does not name %s:\n%s", sub, out.String())
+		}
+		// And it agrees with what `pkgx -- cmd` hands its loader.
+		for _, d := range bottle.LibDirs(closure, dir) {
+			if !strings.Contains(out.String(), d) {
+				t.Errorf("the eval omits %s, which bottle.LibDirs includes:\n%s", d, out.String())
+			}
+		}
+	})
+
+	t.Run("the host's loader: it is NOT exported", func(t *testing.T) {
+		loaderIsOurs = func(string) bool { return false }
+		var out strings.Builder
+		if err := envMode(closure, dir, formatShell, &out); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(out.String(), sub) {
+			t.Errorf("exported our glibc to a tree whose loader is the host's — "+
+				"this is the __pointer_chk_guard failure:\n%s", out.String())
+		}
+		// <prefix>/lib still is: that is the conventional layout and every
+		// other bottle uses it.
+		if !strings.Contains(out.String(), filepath.Join(dir, bottle.GlibcProject, "v2.44.0", "lib")) {
+			t.Errorf("the conventional lib dir went missing too:\n%s", out.String())
+		}
+	})
+}
+
+// The real probe, not the seam: on a machine whose /lib64 loader is the
+// distribution's, it must say no. That is every developer machine and every
+// CI runner this test runs on, and a probe that said yes there is the
+// regression.
+func TestLoaderIsOursSaysNoOnThisMachine(t *testing.T) {
+	if loaderIsOurs(t.TempDir()) {
+		t.Error("an empty directory cannot own this machine's loader")
+	}
+	if loaderIsOurs("") {
+		t.Error("no pkgx dir means no loader of ours")
 	}
 }

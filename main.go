@@ -683,6 +683,7 @@ func composeEnv(closure []bottle.Resolved, dir string) composed {
 		// is no system /sbin to fall back on.
 		addDir(&bin, filepath.Join(p, "sbin"))
 		for _, l := range []string{"lib", "lib64"} {
+			addDir(&ld, filepath.Join(p, l))
 			addDir(&lib, filepath.Join(p, l))
 			addDir(&pc, filepath.Join(p, l, "pkgconfig"))
 		}
@@ -716,37 +717,36 @@ func composeEnv(closure []bottle.Resolved, dir string) composed {
 		addDir(&xdg, filepath.Join(p, "share"))
 		addDir(&aclocal, filepath.Join(p, "share", "aclocal"))
 	}
-	// LD_LIBRARY_PATH comes from bottle.LibDirs, the SAME function `pkgx -- cmd`
-	// uses, and not from the loop above.
+	// glibc's VERSIONED lib dir goes on LD_LIBRARY_PATH only when the loader
+	// that will use it is OURS.
 	//
-	// It was `<prefix>/lib` and `<prefix>/lib64`, which is the conventional
-	// layout and not glibc's: that bottle puts libc.so.6 in
-	// `lib/glibc-2.44/`, and `lib/` holds nothing but that subdirectory.
+	// The bottle puts libc.so.6 in `lib/glibc-2.44/`, and `lib/` holds nothing
+	// else, so `<prefix>/lib` alone exports a directory with no shared object
+	// in it. In a FROM-scratch tree that is fatal — there is no system libc
+	// behind it, and go-pkgx/bk#272 was every sovereign build dying on its
+	// first `mkdir`.
 	//
-	//	$ ls …/gnu.org/glibc/v2.44.0/lib
-	//	glibc-2.44
+	// Adding it unconditionally is WORSE, and I shipped that first. On a
+	// distribution the child's PT_INTERP still names the HOST's ld.so, so it
+	// loads the host loader against OUR libc.so.6 — and the two halves of a
+	// glibc share private symbols:
 	//
-	// So the eval exported a directory with no shared object in it. On a
-	// distribution that is invisible — the host libc.so.6 is found whatever
-	// LD_LIBRARY_PATH says — and in a FROM-scratch tree there is nothing
-	// behind it. go-pkgx/bk#272: the sovereign rootfs died on the first
-	// command of every build, `mkdir: error while loading shared libraries:
-	// libc.so.6`, on both of two recipes that have no dependencies at all.
+	//	mkdir: symbol lookup error: …/glibc-2.44/libc.so.6: undefined symbol:
+	//	__pointer_chk_guard, version GLIBC_PRIVATE
 	//
-	// bottle.LibDirs has globbed `{lib,lib64}/glibc-*` all along, so
-	// `pkgx -- cmd` was right and `eval "$(pkgx +…)"` was wrong — the same
-	// fact encoded twice, which this file's own note at the top of envMode's
-	// neighbourhood already warns about: "A second code path that recomputed
-	// any of it would drift." It did. Calling the one function is the fix;
-	// a third copy of the glob would only move the next drift.
+	// which took the s390x seed lane down. `pkgx -- cmd` never had the problem
+	// because it hands bottle.LibPath to OUR loader as --library-path and runs
+	// both halves from the same build; only the exported environment can pair
+	// them wrongly.
 	//
-	// LIBRARY_PATH is deliberately NOT changed with it. That one is the
-	// LINKER's search path, and what a build links libc against is decided by
-	// the explicit --sysroot/-isystem flags bk passes, not by a search path —
-	// widening it here would be an untested change to linking on every
-	// platform, made on the back of a runtime defect.
-	for _, d := range bottle.LibDirs(closure, dir) {
-		addDir(&ld, d)
+	// So the test is not "is this the right list" but "whose loader will read
+	// it": the canonical path under /lib or /lib64 resolving INTO dir means
+	// `bk builder` posed ours there, which is exactly the scratch tree. On a
+	// distribution it is a real file in /lib64 and this stays out.
+	if loaderIsOurs(dir) {
+		for _, d := range bottle.LibDirs(closure, dir) {
+			addDir(&ld, d)
+		}
 	}
 	for _, e := range []struct {
 		name string
@@ -807,6 +807,33 @@ func sortedKeys(m map[string]string) []string {
 }
 
 // addDir appends a directory to a list if it exists and is not already there.
+// loaderIsOurs reports whether the ELF loader at its canonical path is the one
+// from a bottle under dir — the test for "this process tree runs on OUR glibc".
+//
+// A seam, because a test cannot pose a file at /lib64 and the branch it guards
+// is the one that took a lane down.
+var loaderIsOurs = func(dir string) bool {
+	name := bottle.LoaderName()
+	if name == "" || dir == "" {
+		return false
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	for _, d := range []string{"/lib", "/lib64"} {
+		target, err := filepath.EvalSymlinks(filepath.Join(d, name))
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(abs, target)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
 func addDir(list *[]string, dir string) {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return
