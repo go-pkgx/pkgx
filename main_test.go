@@ -728,3 +728,46 @@ func TestJSONFormGetsNoShellKeyword(t *testing.T) {
 		t.Errorf("stdout = %q, want empty", out)
 	}
 }
+
+// glibc's bottle puts its libraries in a VERSIONED subdirectory — libc.so.6
+// lives in lib/glibc-2.44/, and lib/ holds nothing else. The eval's
+// LD_LIBRARY_PATH must name the subdirectory, or it exports a directory with
+// no shared object in it.
+//
+// On a distribution that is invisible: the host libc.so.6 is found whatever
+// LD_LIBRARY_PATH says. In a FROM-scratch tree there is nothing behind it, and
+// go-pkgx/bk#272 is what that costs — the sovereign rootfs died on the first
+// command of every build,
+//
+//	mkdir: error while loading shared libraries: libc.so.6
+//
+// on two recipes that have no dependencies at all.
+//
+// `pkgx -- cmd` was already right, because it asks bottle.LibDirs. This is the
+// same fact encoded twice; the test is here so the eval half cannot drift
+// again.
+func TestEnvModeNamesGlibcsVersionedLibDir(t *testing.T) {
+	dir := t.TempDir()
+	// The real layout: lib/ contains ONLY the versioned subdirectory.
+	if err := os.MkdirAll(filepath.Join(dir, bottle.GlibcProject, "v2.44.0", "lib", "glibc-2.44"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	closure := []bottle.Resolved{{Project: bottle.GlibcProject, Version: bottle.ParseVer("2.44.0")}}
+
+	var out strings.Builder
+	if err := envMode(closure, dir, formatShell, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	sub := filepath.Join(dir, bottle.GlibcProject, "v2.44.0", "lib", "glibc-2.44")
+	if !strings.Contains(got, sub) {
+		t.Errorf("LD_LIBRARY_PATH does not name %s:\n%s", sub, got)
+	}
+	// And it must agree with what `pkgx -- cmd` computes, which is the point
+	// of calling the one function rather than keeping a second rule.
+	for _, d := range bottle.LibDirs(closure, dir) {
+		if !strings.Contains(got, d) {
+			t.Errorf("the eval omits %s, which bottle.LibDirs includes:\n%s", d, got)
+		}
+	}
+}

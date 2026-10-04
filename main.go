@@ -683,7 +683,6 @@ func composeEnv(closure []bottle.Resolved, dir string) composed {
 		// is no system /sbin to fall back on.
 		addDir(&bin, filepath.Join(p, "sbin"))
 		for _, l := range []string{"lib", "lib64"} {
-			addDir(&ld, filepath.Join(p, l))
 			addDir(&lib, filepath.Join(p, l))
 			addDir(&pc, filepath.Join(p, l, "pkgconfig"))
 		}
@@ -716,6 +715,38 @@ func composeEnv(closure []bottle.Resolved, dir string) composed {
 		}
 		addDir(&xdg, filepath.Join(p, "share"))
 		addDir(&aclocal, filepath.Join(p, "share", "aclocal"))
+	}
+	// LD_LIBRARY_PATH comes from bottle.LibDirs, the SAME function `pkgx -- cmd`
+	// uses, and not from the loop above.
+	//
+	// It was `<prefix>/lib` and `<prefix>/lib64`, which is the conventional
+	// layout and not glibc's: that bottle puts libc.so.6 in
+	// `lib/glibc-2.44/`, and `lib/` holds nothing but that subdirectory.
+	//
+	//	$ ls …/gnu.org/glibc/v2.44.0/lib
+	//	glibc-2.44
+	//
+	// So the eval exported a directory with no shared object in it. On a
+	// distribution that is invisible — the host libc.so.6 is found whatever
+	// LD_LIBRARY_PATH says — and in a FROM-scratch tree there is nothing
+	// behind it. go-pkgx/bk#272: the sovereign rootfs died on the first
+	// command of every build, `mkdir: error while loading shared libraries:
+	// libc.so.6`, on both of two recipes that have no dependencies at all.
+	//
+	// bottle.LibDirs has globbed `{lib,lib64}/glibc-*` all along, so
+	// `pkgx -- cmd` was right and `eval "$(pkgx +…)"` was wrong — the same
+	// fact encoded twice, which this file's own note at the top of envMode's
+	// neighbourhood already warns about: "A second code path that recomputed
+	// any of it would drift." It did. Calling the one function is the fix;
+	// a third copy of the glob would only move the next drift.
+	//
+	// LIBRARY_PATH is deliberately NOT changed with it. That one is the
+	// LINKER's search path, and what a build links libc against is decided by
+	// the explicit --sysroot/-isystem flags bk passes, not by a search path —
+	// widening it here would be an untested change to linking on every
+	// platform, made on the back of a runtime defect.
+	for _, d := range bottle.LibDirs(closure, dir) {
+		addDir(&ld, d)
 	}
 	for _, e := range []struct {
 		name string
