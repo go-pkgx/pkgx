@@ -3,7 +3,7 @@ module github.com/go-pkgx/pkgx
 go 1.27.1
 
 require (
-	github.com/go-pkgx/bottle v0.27.2
+	github.com/go-pkgx/bottle v0.28.0
 	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/zclconf/go-cty v1.19.0
 )
