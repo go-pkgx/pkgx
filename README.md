@@ -90,13 +90,52 @@ gnu.org/bash                             5.3
 gnu.org/gcc                              16.2.0, 1 under
 …
 
-$ pkgx ls zlib.net
-zlib.net is a package, not a namespace — 1.3.2 1.3.1
+$ pkgx ls curl.se
+curl.se — 8.17.0
+  curl.se/ca-certs
+  nghttp2.org
+  openssl.org
+  zlib.net
+
+also a namespace, 3 under it: pkgx ls curl.se/
 ```
 
-A node can be **both** a package and a namespace — `curl.se` is one, and
-`curl.se/ca-certs` lives under it — so the listing says both rather than
-picking one.
+### A node has two kinds of thing under it
+
+`gnu.org` has `gnu.org/bash` under it because of how it is **named**.
+`curl.se` has `openssl.org` under it because of what it **needs**. The same
+words — "what is available under this node" — mean containment at a
+namespace and dependency at a package, and `ls` answers whichever the node
+is. A trailing slash asks for the namespace, which is the only way to reach
+`curl.se/ca-certs` from `curl.se`.
+
+A node can be **both**, and `curl.se` is: the listing shows its
+dependencies and then says where the namespace half is.
+
+```console
+$ pkgx ls --tree curl.se
+curl.se — 8.17.0
+  curl.se/ca-certs
+  nghttp2.org
+  openssl.org
+    curl.se/ca-certs  (shown above)
+  zlib.net
+```
+
+`--depth N` bounds the descent. `guix graph --max-depth` exists for the
+same reason: the full transitive graph of anything interesting is pages
+long, and the first level is what a person reads. A diamond is named once
+and expanded once — and the one expanded is the **direct** dependency,
+because that is the one a reader came for.
+
+**This is read from the catalogue, so it needs no network.** `pkgx --graph`
+answers the same question by resolving against the registry, which is the
+better answer when you have one and no answer at all in a scratch image
+that has not fetched anything yet.
+
+What it shows is what recipes **declare**. It is not the installed closure:
+`bottle` also pulls providers by soname that no recipe names, so a real
+install can hold more than this tree does.
 
 ### Completion asks the binary
 
@@ -126,6 +165,11 @@ the only shape that works in a `FROM scratch` image, where there is no
 completion framework, no python, and no generator to run.
 
 ### Where the list comes from
+
+`PKGX_CATALOG=<file>` reads a catalogue from disk instead of the registry —
+for an air-gapped image, or to inspect one before publishing it. Set and
+unreadable is a **refusal**, not a quiet fall back to the local store:
+somebody who names a file means that file.
 
 `gnu.org/<TAB>` needs to know what exists, and **a registry cannot be asked**:
 

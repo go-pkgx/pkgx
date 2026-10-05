@@ -69,8 +69,14 @@ func TestLsDistinguishesALeafFromNothing(t *testing.T) {
 	if code := runLs([]string{"zlib.net"}, &out, &errb); code != 0 {
 		t.Fatalf("a leaf exited %d", code)
 	}
-	if !strings.Contains(out.String(), "is a package, not a namespace") || !strings.Contains(out.String(), "1.3.2") {
+	// A package node shows what it NEEDS. It used to print "is a package,
+	// not a namespace", which answered the containment question for a node
+	// nobody was asking it about.
+	if !strings.Contains(out.String(), "zlib.net — 1.3.2") {
 		t.Errorf("leaf = %q", out.String())
+	}
+	if !strings.Contains(out.String(), "declares no runtime dependencies") {
+		t.Errorf("a leaf with no dependencies does not say so: %q", out.String())
 	}
 
 	out.Reset()
@@ -205,5 +211,149 @@ func TestCompletionSnippets(t *testing.T) {
 	}
 	if !strings.Contains(errb.String(), "bash|zsh|fish") {
 		t.Errorf("it does not say which shells: %q", errb.String())
+	}
+}
+
+func depTestCatalog() bottle.Catalog {
+	return bottle.Catalog{
+		Generated: "2026-10-05T09:00:00Z",
+		Projects: []bottle.CatalogProject{
+			{Project: "curl.se", Versions: []string{"8.17.0"}, Deps: []string{"openssl.org", "zlib.net", "gone.invalid"}},
+			{Project: "curl.se/ca-certs", Versions: []string{"2026.09.25"}},
+			{Project: "openssl.org", Versions: []string{"3.6.4"}, Deps: []string{"zlib.net"}},
+			{Project: "zlib.net", Versions: []string{"1.3.2"}},
+		},
+	}
+}
+
+// THE THING THE WHOLE FEATURE IS FOR. A node has two kinds of thing under
+// it, and which one `ls` shows is decided by what the node IS:
+//
+//	pkgx ls gnu.org    what the namespace CONTAINS
+//	pkgx ls curl.se    what the package NEEDS
+func TestLsOfAPackageShowsWhatItNeeds(t *testing.T) {
+	withCatalog(t, depTestCatalog(), nil)
+	var out, errb bytes.Buffer
+	if code := runLs([]string{"curl.se"}, &out, &errb); code != 0 {
+		t.Fatalf("code=%d %s", code, errb.String())
+	}
+	got := out.String()
+	for _, want := range []string{"curl.se — 8.17.0", "openssl.org", "zlib.net"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q:\n%s", want, got)
+		}
+	}
+	// One level by default: openssl's own zlib is NOT shown without --tree.
+	if strings.Count(got, "zlib.net") != 1 {
+		t.Errorf("the default is one level deep:\n%s", got)
+	}
+	// A dependency the catalogue does not list says so.
+	if !strings.Contains(got, "gone.invalid") || !strings.Contains(got, "not in this catalogue") {
+		t.Errorf("an unknown dependency is not marked:\n%s", got)
+	}
+	// curl.se is ALSO a namespace, and that must not become unreachable.
+	if !strings.Contains(got, "also a namespace, 1 under it: pkgx ls curl.se/") {
+		t.Errorf("the namespace half is not offered:\n%s", got)
+	}
+}
+
+// --tree descends and marks the diamond; --depth bounds it, as
+// `guix graph --max-depth` does.
+func TestLsTreeAndDepth(t *testing.T) {
+	withCatalog(t, depTestCatalog(), nil)
+	var out, errb bytes.Buffer
+	if code := runLs([]string{"--tree", "curl.se"}, &out, &errb); code != 0 {
+		t.Fatalf("code=%d %s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "shown above") {
+		t.Errorf("the diamond is not marked:\n%s", out.String())
+	}
+
+	out.Reset()
+	if code := runLs([]string{"--tree", "--depth", "1", "curl.se"}, &out, &errb); code != 0 {
+		t.Fatalf("code=%d", code)
+	}
+	if strings.Contains(out.String(), "shown above") {
+		t.Errorf("--depth 1 descended anyway:\n%s", out.String())
+	}
+}
+
+// A trailing slash asks for the NAMESPACE even where a package of that name
+// exists, which is the only way to reach curl.se/ca-certs from curl.se.
+func TestATrailingSlashAsksForTheNamespace(t *testing.T) {
+	withCatalog(t, depTestCatalog(), nil)
+	var out, errb bytes.Buffer
+	if code := runLs([]string{"curl.se/"}, &out, &errb); code != 0 {
+		t.Fatalf("code=%d %s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "curl.se/ca-certs") || strings.Contains(out.String(), "openssl.org") {
+		t.Errorf("a trailing slash gave the dependency tree:\n%s", out.String())
+	}
+}
+
+// A package with no declared runtime dependencies says so rather than
+// printing nothing, which reads as a failure.
+func TestLsOfAPackageWithNoDependencies(t *testing.T) {
+	withCatalog(t, depTestCatalog(), nil)
+	var out, errb bytes.Buffer
+	if code := runLs([]string{"zlib.net"}, &out, &errb); code != 0 {
+		t.Fatalf("code=%d", code)
+	}
+	if !strings.Contains(out.String(), "declares no runtime dependencies") {
+		t.Errorf("out=%q", out.String())
+	}
+}
+
+// PKGX_CATALOG names a file, for an air-gapped image or to inspect one
+// before publishing. Set and unreadable is a MISTAKE, not a reason to show
+// the local store under a header blaming the registry.
+func TestAnUnreadableNamedCatalogueIsRefused(t *testing.T) {
+	prev := catalogFor
+	catalogFor = func() (bottle.Catalog, error) { return bottle.Catalog{}, os.ErrNotExist }
+	t.Cleanup(func() { catalogFor = prev })
+	t.Setenv("PKGX_CATALOG", "/nope/absent.json")
+
+	var out, errb bytes.Buffer
+	if code := runLs([]string{"gnu.org"}, &out, &errb); code != 2 {
+		t.Fatalf("code=%d, want 2", code)
+	}
+	if !strings.Contains(errb.String(), "PKGX_CATALOG names /nope/absent.json") {
+		t.Errorf("stderr=%q", errb.String())
+	}
+	if strings.Contains(errb.String(), "INSTALLED") {
+		t.Error("it fell back to the local store for a file the user named")
+	}
+
+	// A completion in the same state says NOTHING: the other end is a
+	// shell's buffer and a diagnostic there lands in the prompt.
+	var cout bytes.Buffer
+	env := func(k string) string {
+		switch k {
+		case completionsEnv:
+			return "0"
+		case "PKGX_CATALOG":
+			return "/nope/absent.json"
+		}
+		return ""
+	}
+	if !maybeComplete([]string{"gnu"}, env, &cout) {
+		t.Fatal("not answered")
+	}
+	if cout.Len() != 0 {
+		t.Errorf("a completion emitted %q", cout.String())
+	}
+}
+
+// And the header names WHICH catalogue, because "registry" over a file is
+// the kind of small lie that makes a reader doubt the rest.
+func TestTheHeaderNamesTheCatalogueItRead(t *testing.T) {
+	withCatalog(t, depTestCatalog(), nil)
+	t.Setenv("PKGX_CATALOG", "/some/where.json")
+	var out, errb bytes.Buffer
+	if code := runLs([]string{"zlib.net"}, &out, &errb); code != 0 {
+		t.Fatalf("code=%d", code)
+	}
+	if !strings.Contains(errb.String(), "/some/where.json catalogue") {
+		t.Errorf("stderr=%q", errb.String())
 	}
 }

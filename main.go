@@ -54,10 +54,14 @@ usage:
                                      pkge load|unload|purge|list|save|restore
                                      --module also defines module() and ml(),
                                      where no other module system exists
-  pkgx ls [node]                     what is available under a node of the
-                                     tree: "pkgx ls" for the roots, then
-                                     "pkgx ls gnu.org". A node can be both a
-                                     package and a namespace (curl.se is)
+  pkgx ls [--tree] [--depth N] [node]
+                                     what is available under a node. A
+                                     NAMESPACE node lists what it contains,
+                                     a PACKAGE node what it needs; a
+                                     trailing slash asks for the namespace
+                                     where a node is both (curl.se is).
+                                     --tree descends, --depth bounds it.
+                                     Read from the catalogue, so no network
   pkgx completion bash|zsh|fish      the shell snippet for <TAB> completion.
                                      It asks THIS binary, so it follows the
                                      registry without being regenerated

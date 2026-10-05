@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -48,6 +49,20 @@ import (
 // catalogFor is a seam: a test must not need a registry, and the fallback
 // below must be reachable.
 var catalogFor = func() (bottle.Catalog, error) {
+	// A LOCAL catalogue wins, because the case it serves is the one the
+	// registry cannot: an air-gapped or offline image, where the file is
+	// shipped beside the store rather than fetched. It is also how a
+	// person inspects a catalogue before publishing it.
+	//
+	// A path that is set and unreadable is an ERROR, not a quiet fallback
+	// to the registry: somebody who sets PKGX_CATALOG means that file.
+	if p := os.Getenv("PKGX_CATALOG"); p != "" {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return bottle.Catalog{}, err
+		}
+		return bottle.UnmarshalCatalog(b)
+	}
 	c, err := bottle.NewOCIClient(bottle.DistBase)
 	if err != nil {
 		return bottle.Catalog{}, err
@@ -122,49 +137,135 @@ func installedCatalog(dir string) bottle.Catalog {
 // from two sources with different truth — one of them a cache of unknown age
 // — and `pkgx ls` would have no honest header to print. Which one answered
 // is returned, so the caller can say.
-func browseCatalog(dir string) (bottle.Catalog, string) {
-	if c, err := catalogFor(); err == nil && len(c.Projects) > 0 {
-		return c, "registry"
+func browseCatalog(dir string) (bottle.Catalog, string, error) {
+	named := os.Getenv("PKGX_CATALOG")
+	c, err := catalogFor()
+	if err != nil && named != "" {
+		// NAMED and unreadable is a user's mistake, not a reason to show
+		// something else. Falling back here would answer a question about
+		// the file they pointed at with facts from the local store, under
+		// a header blaming "the registry" — three wrongs in one line, and
+		// the comment above catalogFor promised otherwise.
+		return bottle.Catalog{}, named, err
 	}
-	return installedCatalog(dir), "installed"
+	if err == nil && len(c.Projects) > 0 {
+		// Which one, exactly. A header that said "registry" over a
+		// catalogue read from PKGX_CATALOG would be the kind of small lie
+		// that makes a person doubt the rest of the output.
+		if named != "" {
+			return c, named, nil
+		}
+		return c, "registry", nil
+	}
+	return installedCatalog(dir), "installed", nil
 }
 
 // runLs prints what is available under a node.
+// runLs shows what is under a node — and a node has TWO kinds of thing
+// under it.
+//
+//	pkgx ls gnu.org        what that namespace CONTAINS
+//	pkgx ls curl.se        what that package NEEDS
+//
+// The same words, "what is available under this node", mean containment at
+// a namespace and dependency at a package, and a browser has to answer
+// whichever the node is. Nix, Guix and Spack keep the two apart in separate
+// commands; here the node decides, because the person typing already knows
+// which kind of thing they named.
+//
+// `--tree` descends, with `--depth` to bound it. `guix graph --max-depth`
+// exists because a full transitive graph of anything interesting is pages
+// long, and the first level is what a person reads.
 func runLs(args []string, stdout, stderr io.Writer) int {
-	prefix := ""
-	if len(args) > 0 {
-		prefix = args[0]
-	}
-	if len(args) > 1 {
-		fmt.Fprintln(stderr, "pkgx: usage: pkgx ls [node]")
+	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	tree := fs.Bool("tree", false, "descend through the dependencies, not just the first level")
+	depth := fs.Int("depth", 0, "how far --tree descends; 0 is no limit")
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	cat, src := browseCatalog(bottle.Dir())
+	prefix := ""
+	if fs.NArg() > 0 {
+		prefix = fs.Arg(0)
+	}
+	if fs.NArg() > 1 {
+		fmt.Fprintln(stderr, "pkgx: usage: pkgx ls [--tree] [--depth N] [node]")
+		return 2
+	}
+	cat, src, err := browseCatalog(bottle.Dir())
+	if err != nil {
+		fmt.Fprintf(stderr, "pkgx: PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		return 2
+	}
+	say := func() {
+		if src == "installed" {
+			fmt.Fprintln(stderr, "pkgx: showing what is INSTALLED — the registry catalogue could not be read")
+		} else {
+			fmt.Fprintf(stderr, "pkgx: %s catalogue, %s\n", src, cat.Age(time.Now()))
+		}
+	}
+
+	// A PACKAGE node: what it needs. Checked before the namespace children,
+	// because `curl.se` is both a package and a namespace and the package
+	// is what somebody typing its full name meant.
+	node := strings.TrimSuffix(prefix, "/")
+	if p, ok := cat.Lookup(node); ok && !strings.HasSuffix(prefix, "/") {
+		say()
+		fmt.Fprintf(stdout, "%s%s\n", p.Project, versionNote(p))
+		d := *depth
+		if !*tree {
+			d = 1
+		}
+		sub := cat.DepTree(node, d)
+		if len(sub) == 0 {
+			fmt.Fprintln(stdout, "  (declares no runtime dependencies)")
+		}
+		printDepTree(stdout, sub, 1)
+		// A namespace of the same name is still worth naming, or
+		// `curl.se/ca-certs` becomes unreachable from `curl.se`.
+		if kids := cat.Children(node); len(kids) > 0 {
+			fmt.Fprintf(stdout, "\nalso a namespace, %d under it: pkgx ls %s/\n", len(kids), node)
+		}
+		return 0
+	}
+
 	kids := cat.Children(prefix)
 	if len(kids) == 0 {
-		// A node with nothing under it is either a leaf or absent, and the
-		// two must not print alike: one is an answer, the other is a
-		// mistake the user can fix.
-		if p, ok := cat.Lookup(strings.TrimSuffix(prefix, "/")); ok {
-			fmt.Fprintf(stdout, "%s is a package, not a namespace", p.Project)
-			if len(p.Versions) > 0 {
-				fmt.Fprintf(stdout, " — %s", strings.Join(p.Versions, " "))
-			}
-			fmt.Fprintln(stdout)
-			return 0
-		}
 		fmt.Fprintf(stderr, "pkgx: nothing under %q in the %s catalogue\n", prefix, src)
 		return 1
 	}
-	if src == "installed" {
-		fmt.Fprintln(stderr, "pkgx: showing what is INSTALLED — the registry catalogue could not be read")
-	} else {
-		fmt.Fprintf(stderr, "pkgx: %s catalogue, %s\n", src, cat.Age(time.Now()))
-	}
+	say()
 	for _, n := range kids {
 		fmt.Fprintf(stdout, "%-40s %s\n", n.Name, lsNote(cat, n))
 	}
 	return 0
+}
+
+// printDepTree draws the subtree the way `pkgx --graph` already draws one.
+func printDepTree(w io.Writer, ns []bottle.DepNode, level int) {
+	for _, n := range ns {
+		note := ""
+		switch {
+		case !n.Known:
+			// Said out loud: a name with nothing behind it is either a hole
+			// in the catalogue or a project resolved from elsewhere, and a
+			// browser that printed it like any other node would hide both.
+			note = "  (not in this catalogue)"
+		case n.Repeat:
+			note = "  (shown above)"
+		case n.Version != "":
+			note = "  " + n.Version
+		}
+		fmt.Fprintf(w, "%s%s%s\n", strings.Repeat("  ", level), n.Project, note)
+		printDepTree(w, n.Under, level+1)
+	}
+}
+
+func versionNote(p bottle.CatalogProject) string {
+	if len(p.Versions) == 0 {
+		return ""
+	}
+	return " — " + strings.Join(p.Versions, " ")
 }
 
 // lsNote says what a node is in the fewest words that distinguish the three
@@ -236,7 +337,10 @@ func completionsFor(word string) []completion {
 			}
 		}
 	}
-	cat, _ := browseCatalog(bottle.Dir())
+	// A completion says NOTHING about a failure. The other end is a shell's
+	// completion buffer and a diagnostic there lands in the user's prompt,
+	// so an unreadable catalogue simply offers no package names.
+	cat, _, _ := browseCatalog(bottle.Dir())
 	for _, n := range cat.Complete(bare) {
 		v := n.Name
 		if plus {
