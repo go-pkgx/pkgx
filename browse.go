@@ -46,29 +46,42 @@ import (
 // the empty string, and offers the subcommand list — which is what this
 // did when first run against a real store.
 
-// catalogFor is a seam: a test must not need a registry, and the fallback
-// below must be reachable.
+// catalogFor reads the catalogue. IT NEVER TOUCHES THE NETWORK. It is also
+// a seam, so a test needs neither a registry nor a readable home.
+//
+// That is the whole contract, and it is the one thing completion needs: a
+// TAB spawns a fresh process, so anything this function does is paid again
+// on every press. It used to pull the catalogue bottle from the registry
+// here — an OCI token and ~200 KB, per press, never reused — which is a
+// completion nobody would leave switched on.
+//
+// `pkgx catalog update` is the only path that fetches. `guix pull` and
+// `nix-channel --update` draw the same line in the same place.
+//
+// Two sources, in order:
+//
+//	PKGX_CATALOG          a file somebody named: an air-gapped image that
+//	                      ships one beside the store, or a catalogue being
+//	                      inspected before it is published. Set and
+//	                      unreadable is an ERROR, never a quiet fallback.
+//	$PKGX_DIR/catalog/…   what `pkgx catalog update` wrote.
+//
+// Absent is not an error: it is every fresh machine, and the caller falls
+// back to what is installed.
 var catalogFor = func() (bottle.Catalog, error) {
-	// A LOCAL catalogue wins, because the case it serves is the one the
-	// registry cannot: an air-gapped or offline image, where the file is
-	// shipped beside the store rather than fetched. It is also how a
-	// person inspects a catalogue before publishing it.
-	//
-	// A path that is set and unreadable is an ERROR, not a quiet fallback
-	// to the registry: somebody who sets PKGX_CATALOG means that file.
 	if p := os.Getenv("PKGX_CATALOG"); p != "" {
-		b, err := os.ReadFile(p)
+		b, err := osReadFile(p)
 		if err != nil {
 			return bottle.Catalog{}, err
 		}
 		return bottle.UnmarshalCatalog(b)
 	}
-	c, err := bottle.NewOCIClient(bottle.DistBase)
+	osn, arch := bottle.HostSlug()
+	b, err := osReadFile(catalogPath(osn, arch))
 	if err != nil {
 		return bottle.Catalog{}, err
 	}
-	osn, arch := bottle.HostSlug()
-	return bottle.FetchCatalog(c, osn, arch)
+	return bottle.UnmarshalCatalog(b)
 }
 
 // installedCatalog is what this machine HAS, read from the store.
@@ -150,17 +163,19 @@ func browseCatalog(dir string) (bottle.Catalog, string, error) {
 	}
 	if err == nil && len(c.Projects) > 0 {
 		// Which one, exactly. A header that said "registry" over a
-		// catalogue read from PKGX_CATALOG would be the kind of small lie
-		// that makes a person doubt the rest of the output.
+		// catalogue read from a file would be the kind of small lie that
+		// makes a person doubt the rest of the output — and since nothing
+		// is fetched on this path any more, "registry" would be wrong
+		// twice over.
 		if named != "" {
 			return c, named, nil
 		}
-		return c, "registry", nil
+		osn, arch := bottle.HostSlug()
+		return c, catalogPath(osn, arch), nil
 	}
 	return installedCatalog(dir), "installed", nil
 }
 
-// runLs prints what is available under a node.
 // runLs shows what is under a node — and a node has TWO kinds of thing
 // under it.
 //
@@ -197,11 +212,20 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "pkgx: PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
+	// Two different falls back to the store, and they want two different
+	// sentences. "Run pkgx catalog update" is the fix for a machine that
+	// has never fetched one; it is NOT the fix for a file that is there
+	// and will not parse, and telling someone to run a command that
+	// cannot help is worse than saying nothing.
 	say := func() {
-		if src == "installed" {
-			fmt.Fprintln(stderr, "pkgx: showing what is INSTALLED — the registry catalogue could not be read")
-		} else {
-			fmt.Fprintf(stderr, "pkgx: %s catalogue, %s\n", src, cat.Age(time.Now()))
+		switch {
+		case src != "installed":
+			fmt.Fprintf(stderr, "pkgx: catalogue %s, %s\n", src, cat.Age(time.Now()))
+		case catalogAbsent():
+			fmt.Fprintln(stderr, "pkgx: showing what is INSTALLED — no catalogue yet; run: pkgx catalog update")
+		default:
+			osn, arch := bottle.HostSlug()
+			fmt.Fprintf(stderr, "pkgx: showing what is INSTALLED — %s could not be read\n", catalogPath(osn, arch))
 		}
 	}
 
@@ -231,7 +255,17 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 
 	kids := cat.Children(prefix)
 	if len(kids) == 0 {
-		fmt.Fprintf(stderr, "pkgx: nothing under %q in the %s catalogue\n", prefix, src)
+		// The header FIRST here, where every other path prints it after
+		// the answer. An empty answer is the moment provenance matters
+		// MOST, and a machine that has never fetched a catalogue used to
+		// get `nothing under ""` and nothing else — neither why, nor what
+		// to run about it.
+		say()
+		if prefix == "" {
+			fmt.Fprintln(stderr, "pkgx: nothing to list")
+		} else {
+			fmt.Fprintf(stderr, "pkgx: nothing under %q\n", prefix)
+		}
 		return 1
 	}
 	say()
@@ -358,6 +392,7 @@ func completionsFor(word string) []completion {
 
 var subcommandCompletions = []completion{
 	{"ls", "what is available under a node"},
+	{"catalog", "which catalogue is here; `catalog update` fetches one"},
 	{"env", "environments: init, load, unload, purge, avail, show, import"},
 	{"compat", "how much of a package set resolves under a base"},
 	{"completion", "print the shell completion snippet"},

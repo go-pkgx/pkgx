@@ -62,6 +62,12 @@ usage:
                                      where a node is both (curl.se is).
                                      --tree descends, --depth bounds it.
                                      Read from the catalogue, so no network
+  pkgx catalog update                fetch the catalogue of what this platform
+                                     has, into $PKGX_DIR/catalog. THE ONLY
+                                     command that asks the registry what
+                                     exists; ls and <TAB> then read the file,
+                                     so they are instant and work offline
+  pkgx catalog                       which catalogue is here, and how old
   pkgx completion bash|zsh|fish      the shell snippet for <TAB> completion.
                                      It asks THIS binary, so it follows the
                                      registry without being regenerated
@@ -75,6 +81,9 @@ usage:
 
 env:
   PKGX_DIR     bottle store (default: ~/.pkgx)
+  PKGX_CATALOG read the catalogue from this file instead of $PKGX_DIR/catalog —
+               for an air-gapped image, or to inspect one before publishing.
+               Named and unreadable is an error, not a quiet fallback
   PKGX_DIST    bottle source (default: oci://ghcr.io/go-pkgx/packages, the signed
                registry; set https://dist.pkgx.dev for the full unsigned upstream
                pantry — pair with PKGX_VERIFY=0)
@@ -125,6 +134,8 @@ func run(argv []string) int {
 	switch argv[0] {
 	case "ls":
 		return runLs(argv[1:], os.Stdout, os.Stderr)
+	case "catalog":
+		return runCatalogCmd(argv[1:], os.Stdout, os.Stderr)
 	case "completion":
 		if len(argv) < 2 {
 			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx completion bash|zsh|fish")

@@ -78,8 +78,11 @@ git version 2.x.x
 ## Browsing the tree, and <TAB>
 
 ```console
+$ pkgx catalog update
+1907 project(s) → /home/you/.pkgx/catalog/linux-x86-64.json
+
 $ pkgx ls
-pkgx: registry catalogue, 2 hour(s) old
+pkgx: catalogue /home/you/.pkgx/catalog/linux-x86-64.json, 2 hour(s) old
 curl.se                                  8.17.0, 1 under
 github.com                               41 under
 gnu.org                                  30 under
@@ -166,11 +169,6 @@ completion framework, no python, and no generator to run.
 
 ### Where the list comes from
 
-`PKGX_CATALOG=<file>` reads a catalogue from disk instead of the registry —
-for an air-gapped image, or to inspect one before publishing it. Set and
-unreadable is a **refusal**, not a quiet fall back to the local store:
-somebody who names a file means that file.
-
 `gnu.org/<TAB>` needs to know what exists, and **a registry cannot be asked**:
 
 ```
@@ -182,11 +180,66 @@ Versions, yes; projects, no. So the registry carries a **catalogue**, which
 is an ordinary bottle — signed, attested and cached like any other, fetched
 in one pull, per platform because what is available differs by architecture.
 
-When it cannot be read, `pkgx ls` falls back to **what is installed** and
-says so in its header. That is not a lesser answer offline or in a fresh
-scratch image: it is the only true one available, and the two are never
-merged, because "available" about a mix of a registry and a local store is a
-word with no meaning.
+### One command fetches it; nothing else does
+
+`pkgx catalog update` is **the only** thing that asks the registry what
+exists. `ls` and `<TAB>` read the file it wrote, and nothing on that path
+opens a socket.
+
+That line is not an optimisation, it is the difference between a completion
+you leave switched on and one you turn off. A `<TAB>` is a fresh process:
+there is no state between two presses, so a fetch on the read path is paid
+again on every press, in full — an OCI token and ~200 KB of catalogue, each
+time. `guix pull` and `nix-channel --update` put the line in the same place.
+
+Measured, one press of `<TAB>` on `gnu.o`, median of five, with `PKGX_DIST`
+pointed at a non-routable address so that a connect **hangs** rather than
+failing instantly — a closed local port would have come back in
+microseconds and looked exactly like not connecting at all:
+
+| arm | median | answer |
+| --- | --- | --- |
+| before, registry unreachable | 7 326 ms | nothing |
+| before, ghcr reachable | 295 ms | nothing |
+| **after**, catalogue on disk | **7.6 ms** | `gnu.org/` |
+| after, no catalogue yet | 5.2 ms | nothing, in silence |
+
+The second row is the honest status quo and it is the worse news: 295 ms is
+a *failed* pull — the token round-trip plus a 404 — because no catalogue is
+published for darwin/aarch64. A successful one costs more, not less.
+
+`go run ./internal/catbench . <catalog.json> 5` re-measures it, building
+the `before` arm from `origin/main` in a throwaway worktree rather than
+quoting a number from a commit message. The tool has its own tests, because
+a measuring tool nobody measures is how a plausible wrong number gets
+published.
+
+The price is that the index goes stale and nothing tells you by magic, so
+every command that reads it says how old it is, and `pkgx catalog` says it
+on its own:
+
+```console
+$ pkgx catalog
+/home/you/.pkgx/catalog/linux-x86-64.json
+1907 project(s), 905 with dependencies, 2 hour(s) old
+```
+
+On a machine that has never fetched one, that command and `pkgx ls` both
+name the one that fixes it. A catalogue that is **there and will not parse**
+gets a different sentence, naming the file: "run `pkgx catalog update`" is
+no help at all for that, and sending somebody to a command that cannot work
+is worse than saying nothing.
+
+`PKGX_CATALOG=<file>` reads a catalogue from somewhere else entirely — an
+air-gapped image that ships one beside the store, or one being inspected
+before it is published. Set and unreadable is a **refusal**, not a quiet
+fall back to the local store: somebody who names a file means that file.
+
+When there is no catalogue at all, `pkgx ls` falls back to **what is
+installed** and says so in its header. That is not a lesser answer offline
+or in a fresh scratch image: it is the only true one available, and the two
+are never merged, because "available" about a mix of a registry and a local
+store is a word with no meaning.
 
 ## Environments, and HPC
 

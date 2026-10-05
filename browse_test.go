@@ -46,8 +46,10 @@ func TestLsShowsWhatIsUnderANode(t *testing.T) {
 	if !strings.Contains(got, "8.17.0, 1 under") {
 		t.Errorf("curl.se's line does not say it is both:\n%s", got)
 	}
-	// The header says which catalogue, and how old.
-	if !strings.Contains(errb.String(), "registry catalogue") {
+	// The header says which catalogue — by PATH, since nothing is fetched
+	// on this path any more — and how old.
+	osn, arch := bottle.HostSlug()
+	if !strings.Contains(errb.String(), "catalogue "+catalogPath(osn, arch)) {
 		t.Errorf("no provenance header: %q", errb.String())
 	}
 
@@ -353,7 +355,7 @@ func TestTheHeaderNamesTheCatalogueItRead(t *testing.T) {
 	if code := runLs([]string{"zlib.net"}, &out, &errb); code != 0 {
 		t.Fatalf("code=%d", code)
 	}
-	if !strings.Contains(errb.String(), "/some/where.json catalogue") {
+	if !strings.Contains(errb.String(), "catalogue /some/where.json") {
 		t.Errorf("stderr=%q", errb.String())
 	}
 }
