@@ -75,6 +75,75 @@ $ pkgx +git +gnu.org/bash -- sh -c 'git --version'
 git version 2.x.x
 ```
 
+## Browsing the tree, and <TAB>
+
+```console
+$ pkgx ls
+pkgx: registry catalogue, 2 hour(s) old
+curl.se                                  8.17.0, 1 under
+github.com                               41 under
+gnu.org                                  30 under
+zlib.net                                 1.3.2
+
+$ pkgx ls gnu.org
+gnu.org/bash                             5.3
+gnu.org/gcc                              16.2.0, 1 under
+…
+
+$ pkgx ls zlib.net
+zlib.net is a package, not a namespace — 1.3.2 1.3.1
+```
+
+A node can be **both** a package and a namespace — `curl.se` is one, and
+`curl.se/ca-certs` lives under it — so the listing says both rather than
+picking one.
+
+### Completion asks the binary
+
+```sh
+eval "$(pkgx completion bash)"     # or zsh, or: pkgx completion fish | source
+```
+
+```console
+$ pkgx +gnu.org/ba<TAB>
++gnu.org/bash
+
+$ pkgx gnu.o<TAB>
+gnu.org/                                 # with the slash, so the next TAB descends
+```
+
+Spack generates `spack-completion.bash` from its command tree and commits it;
+Guix hand-writes one per shell. Both then need a check that the file still
+matches the program. **Nix took the other road** and this follows it: the
+binary answers completion queries itself when `PKGX_GET_COMPLETIONS` names
+the argument being completed, and the shell snippet is a few lines that call
+it.
+
+The reason to prefer it here is specific: what is being completed is not a
+fixed command tree, it is the **registry** — which changes without pkgx
+changing, and which a generated file could never be level with. It is also
+the only shape that works in a `FROM scratch` image, where there is no
+completion framework, no python, and no generator to run.
+
+### Where the list comes from
+
+`gnu.org/<TAB>` needs to know what exists, and **a registry cannot be asked**:
+
+```
+GET /v2/_catalog                             403   (ghcr issues no token)
+GET /v2/go-pkgx/packages/zlib.net/tags/list  200   ["1.3.2", …]
+```
+
+Versions, yes; projects, no. So the registry carries a **catalogue**, which
+is an ordinary bottle — signed, attested and cached like any other, fetched
+in one pull, per platform because what is available differs by architecture.
+
+When it cannot be read, `pkgx ls` falls back to **what is installed** and
+says so in its header. That is not a lesser answer offline or in a fresh
+scratch image: it is the only true one available, and the two are never
+merged, because "available" about a mix of a registry and a local store is a
+word with no meaning.
+
 ## Environments, and HPC
 
 A module system does two things: it resolves what a package needs, and it edits

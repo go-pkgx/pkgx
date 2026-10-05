@@ -54,6 +54,13 @@ usage:
                                      pkge load|unload|purge|list|save|restore
                                      --module also defines module() and ml(),
                                      where no other module system exists
+  pkgx ls [node]                     what is available under a node of the
+                                     tree: "pkgx ls" for the roots, then
+                                     "pkgx ls gnu.org". A node can be both a
+                                     package and a namespace (curl.se is)
+  pkgx completion bash|zsh|fish      the shell snippet for <TAB> completion.
+                                     It asks THIS binary, so it follows the
+                                     registry without being regenerated
   pkgx env avail                     list the declared environments
   pkgx env show <environment>        what an environment brings, and from where
   pkgx env import <modulefile>...    convert Lmod (.lua) or Environment Modules
@@ -104,7 +111,22 @@ func run(argv []string) int {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
 	}
+	// Before anything else: a completion must not install, fetch or run a
+	// thing, and the surest way to guarantee that is to answer and leave
+	// before the rest of the program exists.
+	if maybeComplete(argv, os.Getenv, os.Stdout) {
+		return 0
+	}
+
 	switch argv[0] {
+	case "ls":
+		return runLs(argv[1:], os.Stdout, os.Stderr)
+	case "completion":
+		if len(argv) < 2 {
+			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx completion bash|zsh|fish")
+			return 2
+		}
+		return runCompletionSnippet(argv[1], os.Stdout, os.Stderr)
 	case "compat":
 		// How far does a chosen base reach? See runCompat.
 		plus, rest := splitPlus(argv[1:])
