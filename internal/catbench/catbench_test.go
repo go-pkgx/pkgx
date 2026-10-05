@@ -44,6 +44,14 @@ func TestMs(t *testing.T) {
 // would be an arm that silently reads no catalogue and looks wonderfully
 // fast.
 func TestCatalogPathComesFromTheBinary(t *testing.T) {
+	// The BSD lanes cross-compile the test binary on the host and copy it
+	// into a VM that has no Go toolchain, so this one cannot build its
+	// subject there. Named rather than silently guarded: catbench is a
+	// developer tool run where a toolchain exists, and the lanes that have
+	// one still run every assertion below.
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("no go toolchain in this lane")
+	}
 	bin := filepath.Join(t.TempDir(), "pkgx")
 	build := exec.Command("go", "build", "-o", bin, ".")
 	build.Dir = ".." + string(filepath.Separator) + ".."
