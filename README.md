@@ -331,6 +331,41 @@ or in a fresh scratch image: it is the only true one available, and the two
 are never merged, because "available" about a mix of a registry and a local
 store is a word with no meaning.
 
+## Running exactly what a lock pins
+
+```console
+$ pkgx --lock seed.lock.hcl -- make
+pkgx: seed.lock.hcl, 231 pin(s), 3 hour(s) old
+```
+
+`bk lock` wrote locks and nothing acted on one. A lock nobody consumes is a
+record, not a mechanism: cargo's `--locked` and npm's `ci` exist because the
+file only means something once a command refuses to deviate from it.
+
+The defect it answers is not hypothetical here. The **same** pantry commit,
+`2df061bd`, resolved tcl to 9.0.4 and then to 9.1.0 four hours apart,
+because a recipe's `versions:` asks GitHub at resolution time. Two builds
+from one recipe set, two answers, and nothing in between to notice.
+
+**Every pin becomes a root**, not just the lock's own `roots`. That is what
+makes it a lock rather than a hint — a transitive dependency the resolver
+would otherwise pick afresh is pinned too, and a set that cannot be
+satisfied exactly **fails** instead of quietly materialising something near
+it. The specs go through the same parser `+pkg@=1.2.3` does, so a locked run
+and a free one cannot drift apart.
+
+A lock taken on another platform is refused by name. The platform changes
+the answer: measured on our own published catalogues, **537 of 1908**
+projects available on `linux/x86-64` have no bottle for `darwin/aarch64`.
+
+`--lock` cannot be mixed with `+pkg`: a lock **is** the set, and adding to
+it would resolve one package freshly against pinned ones — a third thing
+that is neither locked nor free.
+
+**It is not an environment**, and `environments.go` still says so. An
+environment names a *set* and resolves it afresh each time, which is right
+for a shell you live in. A lock names *versions*. Two paths, side by side.
+
 ## Environments, and HPC
 
 A module system does two things: it resolves what a package needs, and it edits
