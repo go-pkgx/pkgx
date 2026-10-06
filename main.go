@@ -43,6 +43,12 @@ usage:
                                      that composes it (see --modulefile)
   pkgx --modulefile +<pkg>...        the same environment as an Lmod modulefile,
                                      so an HPC site keeps its module command
+  pkgx --lock <file> [cmd ...]       run exactly the versions a "bk lock" file
+                                     pins — every pin, not just its roots, so
+                                     a set that cannot be satisfied exactly
+                                     FAILS rather than materialising something
+                                     near it. With no command, prints that
+                                     environment, as +<pkg> does
   pkgx --graph +<pkg>...             the resolved dependency graph: every
                                      version, and which demand decided it.
                                      Resolves only — nothing is downloaded
@@ -206,8 +212,36 @@ func run(argv []string) int {
 		return 0
 	}
 
+	// `--lock` BEFORE the format split, so `pkgx --lock f.hcl --graph`
+	// reads as "the graph of what this lock pins" rather than as a package
+	// called --lock.
+	lockPath, argv, err := splitLock(argv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pkgx:", err)
+		return 2
+	}
 	format, argv := splitFormat(argv)
 	plus, rest := splitPlus(argv)
+	if lockPath != "" {
+		if len(plus) > 0 {
+			// A lock IS the set. Adding a package means resolving that one
+			// freshly against pinned ones — a third thing that is neither
+			// locked nor free, and whichever way it went somebody would be
+			// surprised.
+			fmt.Fprintln(os.Stderr, "pkgx: --lock is the whole set; drop the +pkg, or drop the lock")
+			return 2
+		}
+		d, err := loadLock(lockPath, os.Stderr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "pkgx:", err)
+			return 1
+		}
+		plus = lockedSpecs(d)
+		if len(plus) == 0 {
+			fmt.Fprintf(os.Stderr, "pkgx: %s pins nothing\n", lockPath)
+			return 1
+		}
+	}
 	if format != formatShell && (len(plus) == 0 || len(rest) > 0) {
 		fmt.Fprintln(os.Stderr, "pkgx: --json and --modulefile describe a package set: give +pkg and no command")
 		return 2
