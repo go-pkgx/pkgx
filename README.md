@@ -93,6 +93,9 @@ gnu.org/bash                             5.3
 gnu.org/gcc                              16.2.0, 1 under
 …
 
+$ pkgx ls doxygen.nl
+doxygen.nl — no bottle here
+
 $ pkgx ls curl.se
 curl.se — 8.17.0
   curl.se/ca-certs
@@ -139,6 +142,33 @@ that has not fetched anything yet.
 What it shows is what recipes **declare**. It is not the installed closure:
 `bottle` also pulls providers by soname that no recipe names, so a real
 install can hold more than this tree does.
+
+### Everything is named; what is here is marked
+
+```console
+$ pkgx ls --tree curl.se
+curl.se — 8.17.0
+  curl.se/ca-certs  2026.09.25
+  doxygen.nl  (no bottle here)
+  openssl.org  3.6.0
+```
+
+A catalogue is published **per platform**, because what is available
+differs by architecture — the s390x lane has a fraction of what
+linux/x86-64 has. The choice here is to name everything and mark the rest,
+rather than to hide it: dropping `doxygen.nl` would tell a reader it does
+not exist, which is false; printing it bare tells them nothing. Marking it
+tells them it exists, that there is no bottle for them, and therefore that
+building it is the thing to do next.
+
+In a **tree** that mark is usually the most useful line on the page: it
+names the reason the thing above it cannot be installed, which would
+otherwise print as a bare name among satisfied ones.
+
+A catalogue built without the registry sweep (`bk catalog` with no
+`--versions`) knows nothing about bottles, and says nothing about them —
+every line would otherwise read "no bottle here", which is a statement
+about the catalogue dressed up as a statement about the registry.
 
 ### Completion asks the binary
 
