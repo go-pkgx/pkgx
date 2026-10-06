@@ -400,6 +400,47 @@ that is neither locked nor free.
 environment names a *set* and resolves it afresh each time, which is right
 for a shell you live in. A lock names *versions*. Two paths, side by side.
 
+### And an environment can have one beside it
+
+```console
+$ pkgx env show cfd
+env "cfd"
+  description  the solver stack, as validated on 2026-09-01
+  declared in  /site/environments/site.hcl2
+  package      openmpi.org@5
+  package      hdf5.org
+  lock: /site/environments/cfd.lock.hcl — 231 pin(s), 3 hour(s) old, taken on linux/x86-64
+```
+
+Spack keeps `spack.yaml` and `spack.lock` as a **pair**, explicitly modelled
+on Gemfile/Gemfile.lock: the manifest says what you want, the lock says what
+that meant when it was concretised, and `spack install` inside the
+environment installs the lock. There is no `--lock` flag anywhere in it,
+because the lock belongs to the environment. Nix and Guix answer the same
+problem from the other end — `flake.lock` pins the nixpkgs *input*,
+`channels.scm` pins "all of Guix" — so neither has a resolved-version lock
+to attach to anything.
+
+So: `<name>.lock.hcl` beside the file that declared it, named for the
+**environment** because one `.hcl2` can declare several. When it is there,
+`pkge load cfd` uses its pins — *every* pin, including the ones the
+manifest never named, which is the difference between a lock and a
+restatement of the manifest.
+
+**It reads; it does not write.** `bk lock` writes locks, because
+concretising needs a pantry, an overrides set and a version resolver — none
+of which belong in a runtime that ships to a login node. Spack splits it
+the same way: `spack concretize` writes, `spack install` consumes. A writer
+here could only produce versions with no spec hash, and a lock with empty
+hashes is worse than none — `bk lock --check` would compare `""` against a
+real hash and report every project as drifted.
+
+A lock from **another platform** is ignored rather than refused: a site
+commits one environment directory and loads it on every machine it runs. It
+says so, because silently resolving afresh under a file called
+`cfd.lock.hcl` is how somebody comes to believe a thing is pinned when it
+is not.
+
 ## Environments, and HPC
 
 A module system does two things: it resolves what a package needs, and it edits
