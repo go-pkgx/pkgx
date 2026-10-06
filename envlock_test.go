@@ -190,3 +190,44 @@ func TestEnvLockReadsARealFile(t *testing.T) {
 		t.Errorf("%d pins", len(d.Pins))
 	}
 }
+
+// I MADE THE NAME A PATH, so I have to guard it.
+//
+// An environment's name is an HCL block label and was only ever a map key,
+// where any string is harmless. filepath.Join CLEANS its result, so a
+// crafted label escapes the directory — and the lock it then reads is
+// installed. The pins cannot traverse any more (bottle validates project
+// names), but they can name a real project at an old version, which is a
+// downgrade somebody else chose.
+func TestACraftedEnvironmentNameIsNotAPath(t *testing.T) {
+	const decl = "/site/environments/site.hcl2"
+	for _, bad := range []string{
+		"../../../../tmp/evil",
+		"../cfd",
+		"..",
+		".",
+		"",
+		"cfd/../../etc/x",
+		"cfd\x00",
+		"cfd name",
+		"cfd/sub",
+		"cfd\\sub",
+		strings.Repeat("a", 65),
+	} {
+		if p := envLockPath(environment{Name: bad, File: decl}); p != "" {
+			t.Errorf("name %q yielded a path: %s", bad, p)
+		}
+	}
+	// THE POSITIVE CONTROL: the names a site actually writes still work,
+	// or the guard has eaten the feature.
+	for _, good := range []string{"cfd", "site", "chem-2026", "openfoam_11", "v2.1"} {
+		p := envLockPath(environment{Name: good, File: decl})
+		if p == "" {
+			t.Errorf("a real name was refused: %q", good)
+			continue
+		}
+		if filepath.Dir(p) != "/site/environments" {
+			t.Errorf("%q escaped: %s", good, p)
+		}
+	}
+}

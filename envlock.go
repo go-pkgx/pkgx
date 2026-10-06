@@ -46,10 +46,40 @@ import (
 // declared it, named for the ENVIRONMENT and not for the file, because one
 // `.hcl2` can declare several.
 func envLockPath(e environment) string {
-	if e.File == "" {
+	if e.File == "" || !safeEnvName(e.Name) {
 		return ""
 	}
 	return filepath.Join(filepath.Dir(e.File), e.Name+".lock.hcl")
+}
+
+// safeEnvName guards the name BECAUSE THIS FILE MADE IT A PATH.
+//
+// An environment's name is an HCL block label — `env "cfd"` — and until
+// now it was only ever a map key, where any string is harmless. Joining it
+// to a directory changes that: filepath.Join CLEANS its result, so
+//
+//	env "../../../../tmp/evil"
+//
+// would read /tmp/evil.lock.hcl and install exactly what it pins. The pins
+// themselves can no longer traverse (bottle validates project names), but
+// they can still name a real project at an old version, which is a
+// downgrade somebody else chose.
+//
+// One segment, of the characters a name is actually written in. A site
+// calls these `cfd` and `site`; nothing legitimate needs a slash.
+func safeEnvName(n string) bool {
+	if n == "" || n == "." || n == ".." || len(n) > 64 {
+		return false
+	}
+	for _, r := range n {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '-' || r == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // envLock reads the lock for an environment, if there is one for THIS
