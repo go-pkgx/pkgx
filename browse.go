@@ -232,10 +232,13 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 	// A PACKAGE node: what it needs. Checked before the namespace children,
 	// because `curl.se` is both a package and a namespace and the package
 	// is what somebody typing its full name meant.
+	// Computed ONCE: an unswept catalogue makes knowsVersions walk every
+	// project, and this is on the path a <TAB> takes.
+	swept := knowsVersions(cat)
 	node := strings.TrimSuffix(prefix, "/")
 	if p, ok := cat.Lookup(node); ok && !strings.HasSuffix(prefix, "/") {
 		say()
-		fmt.Fprintf(stdout, "%s%s\n", p.Project, versionNote(p))
+		fmt.Fprintf(stdout, "%s%s\n", p.Project, versionNote(cat, p))
 		d := *depth
 		if !*tree {
 			d = 1
@@ -244,7 +247,7 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 		if len(sub) == 0 {
 			fmt.Fprintln(stdout, "  (declares no runtime dependencies)")
 		}
-		printDepTree(stdout, sub, 1)
+		printDepTree(stdout, sub, 1, swept)
 		// A namespace of the same name is still worth naming, or
 		// `curl.se/ca-certs` becomes unreachable from `curl.se`.
 		if kids := cat.Children(node); len(kids) > 0 {
@@ -276,7 +279,7 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 }
 
 // printDepTree draws the subtree the way `pkgx --graph` already draws one.
-func printDepTree(w io.Writer, ns []bottle.DepNode, level int) {
+func printDepTree(w io.Writer, ns []bottle.DepNode, level int, swept bool) {
 	for _, n := range ns {
 		note := ""
 		switch {
@@ -289,27 +292,72 @@ func printDepTree(w io.Writer, ns []bottle.DepNode, level int) {
 			note = "  (shown above)"
 		case n.Version != "":
 			note = "  " + n.Version
+		case swept:
+			// In a TREE this is the most useful line on the page: a
+			// dependency with no bottle for this platform is the reason
+			// the thing above it cannot be installed, and it would
+			// otherwise print as a bare name among satisfied ones.
+			note = "  (" + noBottle + ")"
 		}
 		fmt.Fprintf(w, "%s%s%s\n", strings.Repeat("  ", level), n.Project, note)
-		printDepTree(w, n.Under, level+1)
+		printDepTree(w, n.Under, level+1, swept)
 	}
 }
 
-func versionNote(p bottle.CatalogProject) string {
-	if len(p.Versions) == 0 {
-		return ""
+func versionNote(cat bottle.Catalog, p bottle.CatalogProject) string {
+	if len(p.Versions) > 0 {
+		return " — " + strings.Join(p.Versions, " ")
 	}
-	return " — " + strings.Join(p.Versions, " ")
+	if knowsVersions(cat) {
+		return " — " + noBottle
+	}
+	return ""
 }
 
-// lsNote says what a node is in the fewest words that distinguish the three
-// cases — a package, a namespace, or both.
+// noBottle is what a project with nothing published for this platform says.
+//
+// Named, and marked. A catalogue is published PER PLATFORM because what is
+// available differs by architecture — the s390x lane has a fraction of what
+// linux/x86-64 has — and the choice here is deliberately not to hide the
+// rest: somebody looking for doxygen.nl should learn that it exists and has
+// no bottle for them, which tells them to go and build it. Dropping the
+// name would tell them it does not exist, which is false and sends them
+// nowhere.
+const noBottle = "no bottle here"
+
+// knowsVersions reports whether this catalogue was built with the registry
+// sweep, i.e. whether an empty version list MEANS anything.
+//
+// `bk catalog` without --versions names projects and nothing else, and on
+// such a catalogue every line would otherwise read "no bottle here" — which
+// would be a statement about the catalogue dressed up as a statement about
+// the registry. There is no flag to read, so this reads the only evidence
+// there is: a swept catalogue has versions SOMEWHERE.
+//
+// One case it gets wrong, and it is the benign direction: a swept catalogue
+// for a platform that carries NOTHING looks unswept, and a reader is told
+// "a package" rather than "no bottle here". That is a fresh lane, where the
+// weaker answer is still true.
+func knowsVersions(cat bottle.Catalog) bool {
+	for _, p := range cat.Projects {
+		if len(p.Versions) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// lsNote says what a node is in the fewest words that distinguish the cases
+// — a package, a namespace, both, and a package with nothing here for you.
 func lsNote(cat bottle.Catalog, n bottle.Node) string {
 	var parts []string
 	if n.Leaf {
-		if p, ok := cat.Lookup(n.Name); ok && len(p.Versions) > 0 {
+		switch p, ok := cat.Lookup(n.Name); {
+		case ok && len(p.Versions) > 0:
 			parts = append(parts, p.Versions[0])
-		} else {
+		case ok && knowsVersions(cat):
+			parts = append(parts, noBottle)
+		default:
 			parts = append(parts, "a package")
 		}
 	}
