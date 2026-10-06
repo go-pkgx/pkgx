@@ -251,6 +251,11 @@ is what you meant, every time. Each line says why it is there and what you
 would get, including `no bottle here` and `✓` where they apply. Offline,
 from the same catalogue everything else reads.
 
+A query shorter than three characters matches **commands only**. Two
+characters is not a search, it is a sieve: `search rg` used to return 625
+projects, 550 of them because `rg` sits inside `.org` — the result anybody
+wanted was still first, and 550 lines of noise stood behind it.
+
 Nothing found exits **non-zero**, so `pkgx search x || echo none` works. And
 a catalogue that carries no command names says so rather than letting "no
 such package" stand for "this catalogue cannot answer that kind of
