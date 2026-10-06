@@ -78,6 +78,13 @@ usage:
                                      it provides: "pkgx search rg" finds
                                      crates.io/ripgrep, which no guess at the
                                      project name reaches. Offline
+  pkgx browse [node]                 walk the tree full-screen: arrows to move
+                                     and descend, tab for names vs
+                                     dependencies, / to search, space to pin,
+                                     q to quit printing what you pinned — so
+                                     pkgx +$(pkgx browse) composes. Reads the
+                                     cached catalogue, so no network; without
+                                     a terminal it prints the tree and exits
   pkgx completion bash|zsh|fish      the shell snippet for <TAB> completion.
                                      It asks THIS binary, so it follows the
                                      registry without being regenerated
@@ -148,6 +155,8 @@ func run(argv []string) int {
 		return runCatalogCmd(argv[1:], os.Stdout, os.Stderr)
 	case "search":
 		return runSearch(argv[1:], os.Stdout, os.Stderr)
+	case "browse":
+		return runBrowse(argv[1:], os.Stdin, os.Stdout, os.Stderr)
 	case "completion":
 		if len(argv) < 2 {
 			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx completion bash|zsh|fish")

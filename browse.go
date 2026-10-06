@@ -484,6 +484,7 @@ var subcommandCompletions = []completion{
 	{"ls", "what is available under a node"},
 	{"catalog", "which catalogue is here; `catalog update` fetches one"},
 	{"search", "find a package by name or by a command it provides"},
+	{"browse", "walk the tree full-screen"},
 	{"env", "environments: init, load, unload, purge, avail, show, import"},
 	{"compat", "how much of a package set resolves under a base"},
 	{"completion", "print the shell completion snippet"},

@@ -192,6 +192,40 @@ it is the one where a command would fetch something new. A repeat in the
 tree is not marked twice: the node it points at already carries the mark,
 and a second one reads as a second copy in the store.
 
+## Walking the tree
+
+```console
+$ pkgx browse
+gnu.org — 54
+
+> gnu.org/bash                             5.3  ✓
+  gnu.org/gcc                              no bottle here
+ +gnu.org/make                             4.4.1
+
+↑ ↓ / k j move · → / l / enter descend · ← / h back · tab names ⇄ dependencies
+· / search · space pin for the exit line · q quit, printing what is pinned
+```
+
+`pkgx ls` answers one question per command, which is right for a script and
+wrong for a person who does not yet know what they are looking for: reaching
+`curl.se/ca-certs` from `curl.se` costs two commands and knowing that the
+trailing slash exists. [`nix-tree`](https://github.com/utdemir/nix-tree) is
+the precedent — a whole-screen browser over a store, because the same data
+read one node at a time is data nobody explores.
+
+**Descending into a leaf shows what it needs**, rather than making you press
+`tab`; that decision is the whole difference between a browser and a pair of
+commands.
+
+`q` prints what you pinned on **stdout** while the screen goes to stderr, so
+`pkgx +$(pkgx browse)` composes instead of putting borders on a command line.
+
+**It reads the cached catalogue and nothing else** — no network, no
+resolution, no store walk per keystroke. And **without a terminal it prints
+the tree and exits**: `pkgx browse | less`, a CI log and a scratch image are
+the same case, and a command that refuses to work when its output is a pipe
+is one people stop putting in scripts.
+
 ## You know the command, not the package
 
 ```console

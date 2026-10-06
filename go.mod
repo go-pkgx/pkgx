@@ -6,6 +6,7 @@ require (
 	github.com/go-pkgx/bottle v0.33.0
 	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/zclconf/go-cty v1.19.0
+	golang.org/x/term v0.46.0
 )
 
 require (
