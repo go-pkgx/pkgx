@@ -42,13 +42,25 @@ type arm struct {
 }
 
 func main() {
-	if len(os.Args) != 4 {
-		fmt.Fprintln(os.Stderr, "usage: catbench <worktree> <catalog.json> <runs>")
+	if len(os.Args) != 4 && len(os.Args) != 5 {
+		fmt.Fprintln(os.Stderr, "usage: catbench <worktree> <catalog.json> <runs> [baseline-ref]")
 		os.Exit(2)
 	}
 	tree, catalog := os.Args[1], os.Args[2]
 	runs := 0
 	fmt.Sscan(os.Args[3], &runs)
+	// The baseline is a NAMED ref, not "whatever main is today".
+	//
+	// The first numbers this tool produced were published against
+	// origin/main, and main then moved: running the same command a day
+	// later compares two versions that both have the change, reports a
+	// handsome 5 ms for the baseline, and quietly means something else.
+	// A reader reproducing a published figure must be able to name the
+	// commit it came from.
+	baseline := "origin/main"
+	if len(os.Args) == 5 {
+		baseline = os.Args[4]
+	}
 
 	tmp, err := os.MkdirTemp("", "catbench")
 	must(err)
@@ -57,7 +69,7 @@ func main() {
 	after := filepath.Join(tmp, "pkgx-after")
 	must(build(tree, "", after))
 	before := filepath.Join(tmp, "pkgx-before")
-	must(build(tree, "origin/main", before))
+	must(build(tree, baseline, before))
 
 	// The store the "after" arm reads: a real 1907-project catalogue at the
 	// path `pkgx catalog update` writes.
@@ -76,7 +88,7 @@ func main() {
 		// What a user has today: no catalogue concept, PKGX_DIST reachable
 		// on a normal machine. Here it is blackholed, which is what makes
 		// the fetch visible as time rather than as a traced syscall.
-		{"before (origin/main)", before, []string{"PKGX_DIR=" + empty, "PKGX_DIST=" + blackhole}},
+		{"before (" + baseline + ")", before, []string{"PKGX_DIR=" + empty, "PKGX_DIST=" + blackhole}},
 		// The same binary with the registry REACHABLE, because the
 		// blackhole arm above measures the worst case and quoting only
 		// that would overstate the win. This is what the status quo

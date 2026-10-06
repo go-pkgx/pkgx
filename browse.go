@@ -299,20 +299,56 @@ func printDepTree(w io.Writer, ns []bottle.DepNode, level int, swept bool) {
 			// otherwise print as a bare name among satisfied ones.
 			note = "  (" + noBottle + ")"
 		}
+		// Not on a repeat: the node it repeats already carries the mark,
+		// and a second one reads as a second copy in the store.
+		if !n.Repeat {
+			note += haveNote(n.Project, n.Version)
+		}
 		fmt.Fprintf(w, "%s%s%s\n", strings.Repeat("  ", level), n.Project, note)
 		printDepTree(w, n.Under, level+1, swept)
 	}
 }
 
 func versionNote(cat bottle.Catalog, p bottle.CatalogProject) string {
-	if len(p.Versions) > 0 {
-		return " — " + strings.Join(p.Versions, " ")
+	switch {
+	case len(p.Versions) > 0:
+		return " — " + strings.Join(p.Versions, " ") + haveNote(p.Project, p.Versions[0])
+	case knowsVersions(cat):
+		return " — " + noBottle + haveNote(p.Project, "")
 	}
-	if knowsVersions(cat) {
-		return " — " + noBottle
-	}
-	return ""
+	return haveNote(p.Project, "")
 }
+
+// haveNote marks what this machine already has.
+//
+// nix and guix show the state of the store in everything they print, and
+// here nothing did: a catalogue says what EXISTS, and a reader standing in
+// front of it mostly wants to know what they already have. `pkgx ls
+// curl.se` before and after `pkgx curl.se --version` printed the same page.
+//
+// A bare ✓ when what is installed is the version on offer, and `✓ <version>`
+// when it is NOT — which is the case worth the extra word, because it is
+// the one where a command would fetch something new. Showing the version
+// every time would bury that difference in noise.
+//
+// It is read per line rather than from one walk of the store, because a
+// `ls` prints the children of ONE node — tens, not thousands — and a walk
+// of a store with hundreds of packages is the kind of cost that only shows
+// up on somebody else's machine.
+func haveNote(project, offered string) string {
+	have := installedVersions(project, bottle.Dir())
+	if len(have) == 0 {
+		return ""
+	}
+	if have[0] == offered {
+		return "  ✓"
+	}
+	return "  ✓ " + have[0]
+}
+
+// installedVersions is a seam: a test must not need a populated store, and
+// the empty branch must be reachable from one that is.
+var installedVersions = bottle.InstalledVersions
 
 // noBottle is what a project with nothing published for this platform says.
 //
@@ -352,14 +388,20 @@ func knowsVersions(cat bottle.Catalog) bool {
 func lsNote(cat bottle.Catalog, n bottle.Node) string {
 	var parts []string
 	if n.Leaf {
+		offered := ""
 		switch p, ok := cat.Lookup(n.Name); {
 		case ok && len(p.Versions) > 0:
-			parts = append(parts, p.Versions[0])
+			offered = p.Versions[0]
+			parts = append(parts, offered)
 		case ok && knowsVersions(cat):
 			parts = append(parts, noBottle)
 		default:
 			parts = append(parts, "a package")
 		}
+		// Appended to the first part rather than added as one of its own,
+		// so the mark stays beside the version it is about and does not
+		// drift past a "3 under" that belongs to the namespace half.
+		parts[0] += haveNote(n.Name, offered)
 	}
 	if n.Under > 0 {
 		parts = append(parts, fmt.Sprintf("%d under", n.Under))

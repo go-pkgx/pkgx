@@ -89,7 +89,7 @@ gnu.org                                  30 under
 zlib.net                                 1.3.2
 
 $ pkgx ls gnu.org
-gnu.org/bash                             5.3
+gnu.org/bash                             5.3  ✓
 gnu.org/gcc                              16.2.0, 1 under
 …
 
@@ -170,6 +170,28 @@ A catalogue built without the registry sweep (`bk catalog` with no
 every line would otherwise read "no bottle here", which is a statement
 about the catalogue dressed up as a statement about the registry.
 
+### And what you already have
+
+```console
+$ pkgx ls --tree curl.se
+curl.se — 8.17.0  ✓
+  curl.se/ca-certs  2026.09.25  ✓
+  doxygen.nl  (no bottle here)
+  openssl.org  3.6.0  ✓ 3.5.1
+  zlib.net  1.3.2
+```
+
+A catalogue says what **exists**; a reader standing in front of it mostly
+wants to know what they **have**. nix and guix show the state of the store
+in everything they print; here nothing did, and `pkgx ls curl.se` printed
+the same page before and after installing it.
+
+A bare `✓` when what is installed is the version on offer, and
+`✓ <version>` when it is **not** — the case worth the extra word, because
+it is the one where a command would fetch something new. A repeat in the
+tree is not marked twice: the node it points at already carries the mark,
+and a second one reads as a second copy in the store.
+
 ### Completion asks the binary
 
 ```sh
@@ -238,11 +260,19 @@ The second row is the honest status quo and it is the worse news: 295 ms is
 a *failed* pull — the token round-trip plus a 404 — because no catalogue is
 published for darwin/aarch64. A successful one costs more, not less.
 
-`go run ./internal/catbench . <catalog.json> 5` re-measures it, building
-the `before` arm from `origin/main` in a throwaway worktree rather than
-quoting a number from a commit message. The tool has its own tests, because
-a measuring tool nobody measures is how a plausible wrong number gets
-published.
+```sh
+go run ./internal/catbench . <catalog.json> 5 97f08e3
+```
+
+re-measures it, building the `before` arm from that commit in a throwaway
+worktree rather than quoting a number from a commit message. **The baseline
+is named**, because `origin/main` moves: run it against `main` a week later
+and both arms have the change, the baseline reports a handsome 5 ms, and
+the comparison quietly means something else. `97f08e3` is the commit before
+the catalogue became a local file.
+
+The tool has its own tests, because a measuring tool nobody measures is how
+a plausible wrong number gets published.
 
 The price is that the index goes stale and nothing tells you by magic, so
 every command that reads it says how old it is, and `pkgx catalog` says it

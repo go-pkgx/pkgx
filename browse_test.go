@@ -28,6 +28,21 @@ func withCatalog(t *testing.T, c bottle.Catalog, err error) {
 	prev := catalogFor
 	catalogFor = func() (bottle.Catalog, error) { return c, err }
 	t.Cleanup(func() { catalogFor = prev })
+	// And an EMPTY store, because a browse test must not read the store of
+	// whoever runs it. Without this the ✓ marks come from ~/.pkgx: the
+	// suite passed or failed depending on what the developer happened to
+	// have installed, and it was a test asserting "8.17.0, 1 under" that
+	// noticed, on a machine where curl.se was.
+	withInstalled(t, nil)
+}
+
+// withInstalled answers "what does this machine have" from a map rather
+// than from a directory.
+func withInstalled(t *testing.T, have map[string][]string) {
+	t.Helper()
+	prev := installedVersions
+	installedVersions = func(project, _ string) []string { return have[project] }
+	t.Cleanup(func() { installedVersions = prev })
 }
 
 func TestLsShowsWhatIsUnderANode(t *testing.T) {
