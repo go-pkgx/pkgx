@@ -192,6 +192,36 @@ it is the one where a command would fetch something new. A repeat in the
 tree is not marked twice: the node it points at already carries the mark,
 and a second one reads as a second copy in the store.
 
+## You know the command, not the package
+
+```console
+$ pkgx search rg
+crates.io/ripgrep                        rg  14.1.1
+aardvark.io/rgbds                        rgbasm  0.9.0
+```
+
+`rg` is `crates.io/ripgrep`. No guess at the project name reaches it, and
+`<TAB>` — which is a **prefix** on the project path — never will either.
+Completion and search are different tools, and that is the line between
+them.
+
+`nix search`, `guix search` and `spack list -s` all match a package's
+**description**, which is right for a collection that has descriptions.
+This pantry does not: of its 1907 recipes, **1592** declare the commands
+they provide and **six** carry a summary. A search over prose would find
+six packages.
+
+So the match is on names and on commands, ranked by **how** a thing
+matched rather than by how often — a command named exactly what you typed
+is what you meant, every time. Each line says why it is there and what you
+would get, including `no bottle here` and `✓` where they apply. Offline,
+from the same catalogue everything else reads.
+
+Nothing found exits **non-zero**, so `pkgx search x || echo none` works. And
+a catalogue that carries no command names says so rather than letting "no
+such package" stand for "this catalogue cannot answer that kind of
+question".
+
 ### Completion asks the binary
 
 ```sh

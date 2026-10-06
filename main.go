@@ -68,6 +68,10 @@ usage:
                                      exists; ls and <TAB> then read the file,
                                      so they are instant and work offline
   pkgx catalog                       which catalogue is here, and how old
+  pkgx search [-n N] <text>          find a package by its name or by a COMMAND
+                                     it provides: "pkgx search rg" finds
+                                     crates.io/ripgrep, which no guess at the
+                                     project name reaches. Offline
   pkgx completion bash|zsh|fish      the shell snippet for <TAB> completion.
                                      It asks THIS binary, so it follows the
                                      registry without being regenerated
@@ -136,6 +140,8 @@ func run(argv []string) int {
 		return runLs(argv[1:], os.Stdout, os.Stderr)
 	case "catalog":
 		return runCatalogCmd(argv[1:], os.Stdout, os.Stderr)
+	case "search":
+		return runSearch(argv[1:], os.Stdout, os.Stderr)
 	case "completion":
 		if len(argv) < 2 {
 			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx completion bash|zsh|fish")
