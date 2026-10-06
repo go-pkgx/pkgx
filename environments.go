@@ -214,6 +214,16 @@ func expandSpecs(specs []string, envs map[string]environment) []string {
 	var out []string
 	for _, s := range specs {
 		if e, ok := envs[s]; ok {
+			// A LOCK BESIDE IT WINS. The manifest asks for
+			// `openmpi.org@5`; the lock says which 5, and which hdf5
+			// and zlib underneath it. Expanding to the pins here rather
+			// than anywhere else keeps ONE resolver: a locked load and a
+			// free one go down the same path, and a second way of
+			// honouring pins would drift from the first.
+			if d, ok := envLock(e, envLockWarn); ok {
+				out = append(out, lockedSpecsFor(d)...)
+				continue
+			}
 			out = append(out, e.Packages...)
 			continue
 		}
@@ -221,6 +231,10 @@ func expandSpecs(specs []string, envs map[string]environment) []string {
 	}
 	return out
 }
+
+// envLockWarn is where a lock's complaints go: stderr, never stdout, since
+// `eval "$(pkge load cfd)"` is reading the other one.
+var envLockWarn = func(msg string) { fmt.Fprintln(os.Stderr, "pkgx:", msg) }
 
 // sortedEnvironments returns the environments by name, for `avail`.
 func sortedEnvironments(envs map[string]environment) []environment {

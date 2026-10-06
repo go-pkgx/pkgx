@@ -1148,5 +1148,9 @@ func modeShow(name string, stdout io.Writer) error {
 	for _, p := range e.Packages {
 		fmt.Fprintf(stdout, "  package      %s\n", p)
 	}
+	// Whether a lock is in force, because an environment that resolves
+	// afresh and one that is pinned look identical from the outside and
+	// behave differently the day a version moves.
+	describeEnvLock(e, stdout)
 	return nil
 }
