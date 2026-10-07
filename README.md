@@ -154,9 +154,17 @@ openssl.org — 4.0.2  ✓ 3.6.0
 runtime dependents on darwin/aarch64; a build-only user is in no catalogue
 ```
 
-**153** of 1908 projects need openssl directly on the catalogue published
-2026-10-06, **789** transitively with `--tree`. That number is the blast radius
-of a bump.
+That count is the blast radius of a bump — and it is **not one number**. On the
+catalogues published 2026-10-06, out of 1908 projects each:
+
+| platform | need openssl directly | transitively (`--tree`) |
+| --- | ---: | ---: |
+| darwin/aarch64 | 153 | 789 |
+| linux/aarch64 | 164 | 854 |
+
+A catalogue records what a platform really carries, so a project with no bottle
+there has no edges there. That is why the platform is printed under the list
+rather than left to be quoted bare.
 
 `pkgx why` is the third question — not *what is in the closure* but **which
 link put it there**:
