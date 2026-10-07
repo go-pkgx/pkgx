@@ -68,6 +68,18 @@ usage:
                                      where a node is both (curl.se is).
                                      --tree descends, --depth bounds it.
                                      Read from the catalogue, so no network
+  pkgx ls --dependents [--tree] <pkg>
+                                     the other direction: who NEEDS this.
+                                     What you ask before CHANGING something,
+                                     which no amount of descending answers.
+                                     RUNTIME dependents on this platform —
+                                     a build-only user is in no catalogue,
+                                     so this is a closure, not a rebuild set
+  pkgx why <project> <dependency>    the shortest path by which one needs the
+                                     other, as "nix why-depends" answers it:
+                                     an explanation, not every route. Says so
+                                     plainly when there is none. Declared
+                                     dependencies, not scanned bytes
   pkgx catalog update                fetch the catalogue of what this platform
                                      has, into $PKGX_DIR/catalog. THE ONLY
                                      command that asks the registry what
@@ -153,6 +165,8 @@ func run(argv []string) int {
 		return runLs(argv[1:], os.Stdout, os.Stderr)
 	case "catalog":
 		return runCatalogCmd(argv[1:], os.Stdout, os.Stderr)
+	case "why":
+		return runWhy(argv[1:], os.Stdout, os.Stderr)
 	case "search":
 		return runSearch(argv[1:], os.Stdout, os.Stderr)
 	case "browse":

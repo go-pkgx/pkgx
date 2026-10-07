@@ -139,6 +139,50 @@ answers the same question by resolving against the registry, which is the
 better answer when you have one and no answer at all in a scratch image
 that has not fetched anything yet.
 
+### The other direction
+
+Everything above descends, which answers *what does this need* — the question
+before **installing**. `--dependents` asks the one before **changing**:
+
+```console
+$ pkgx ls --dependents openssl.org
+openssl.org — 4.0.2  ✓ 3.6.0
+  agwa.name/git-crypt  (no bottle here)
+  apache.org/arrow  25.0.1
+  …
+
+runtime dependents on darwin/aarch64; a build-only user is in no catalogue
+```
+
+**153** of 1908 projects need openssl directly on the catalogue published
+2026-10-06, **789** transitively with `--tree`. That number is the blast radius
+of a bump.
+
+`pkgx why` is the third question — not *what is in the closure* but **which
+link put it there**:
+
+```console
+$ pkgx why git-scm.org zlib.net
+git-scm.org — 2.55.0  ✓ 2.47.1
+  → zlib.net — 1.3.2  ✓
+```
+
+A **shortest** path, as [`nix why-depends`][why] answers it: an explanation a
+person can hold, not every route. No path is an answer too — it exits 1 and
+says so, which is what tells you a bump cannot reach you.
+
+[why]: https://nix.dev/manual/nix/2.35/command-ref/new-cli/nix3-why-depends
+
+**What these are not.** The catalogue holds **runtime** dependencies for **one
+platform**, so `--dependents` is a closure and not a rebuild set: a build
+dependency is paid once by the factory and is in nobody's installed closure.
+[`guix refresh --list-dependent`][gr] is the rebuild question, and its manual
+says plainly that it only approximates it. And `why` reads the **declared**
+graph; Nix scans built output for the hash parts of store paths, which there is
+nothing to do before anything is installed.
+
+[gr]: https://guix.gnu.org/manual/html_node/Invoking-guix-refresh.html
+
 What it shows is what recipes **declare**. It is not the installed closure:
 `bottle` also pulls providers by soname that no recipe names, so a real
 install can hold more than this tree does.
