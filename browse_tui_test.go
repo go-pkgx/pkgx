@@ -77,30 +77,15 @@ func TestDescendingIntoALeafShowsWhatItNeeds(t *testing.T) {
 	if b.at != "openssl.org" {
 		t.Fatalf("at=%q", b.at)
 	}
-	if !b.deps {
+	if b.view != viewDeps {
 		t.Error("descending into a leaf did not switch to dependencies")
 	}
 	// And a node that HAS children lists them instead, rather than being
 	// dragged into dependency mode by the same key.
 	b2 := &browser{cat: browseCat()}
 	press(t, b2, "j\r") // → gnu.org, a namespace
-	if b2.at != "gnu.org" || b2.deps {
-		t.Errorf("a namespace was switched to dependencies: at=%q deps=%v", b2.at, b2.deps)
-	}
-}
-
-func TestTabSwitchesNamesAndDependencies(t *testing.T) {
-	b := &browser{cat: browseCat(), at: "curl.se"}
-	if got := strings.Join(b.rows(), " "); got != "curl.se/ca-certs" {
-		t.Fatalf("names under curl.se = %q", got)
-	}
-	press(t, b, "\t")
-	if got := strings.Join(b.rows(), " "); got != "openssl.org zlib.net" {
-		t.Errorf("dependencies of curl.se = %q", got)
-	}
-	press(t, b, "\t")
-	if got := strings.Join(b.rows(), " "); got != "curl.se/ca-certs" {
-		t.Errorf("tab did not switch back: %q", got)
+	if b2.at != "gnu.org" || b2.view != viewNames {
+		t.Errorf("a namespace was switched to dependencies: at=%q view=%v", b2.at, b2.view)
 	}
 }
 
@@ -261,7 +246,7 @@ func TestTheHelpLineMatchesTheBindings(t *testing.T) {
 		b.sel = 1
 		before := *b
 		press(t, b, probe.press)
-		if b.sel == before.sel && b.at == before.at && b.deps == before.deps && len(b.pinned) == len(before.pinned) {
+		if b.sel == before.sel && b.at == before.at && b.view == before.view && len(b.pinned) == len(before.pinned) {
 			t.Errorf("%s (%q) did nothing", probe.is, probe.press)
 		}
 		*b = before
@@ -283,5 +268,89 @@ func TestBrowseIsReachable(t *testing.T) {
 	}
 	if code := runBrowse([]string{"a", "b"}, bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
 		t.Error("two nodes is not a usage error")
+	}
+}
+
+// TAB CYCLES THREE VIEWS, not two. A node has what it CONTAINS, what it
+// NEEDS, and who NEEDS IT — and the third is the question asked before
+// changing something, which the browser could not ask at all.
+//
+// The cycle must come back round: a key that reaches a state with no way
+// out of it is worse than no key.
+func TestTabCyclesThreeViews(t *testing.T) {
+	b := &browser{cat: browseCat(), at: "curl.se"}
+	if got := strings.Join(b.rows(), " "); got != "curl.se/ca-certs" {
+		t.Fatalf("names under curl.se = %q", got)
+	}
+	press(t, b, "\t")
+	if got := strings.Join(b.rows(), " "); got != "openssl.org zlib.net" {
+		t.Errorf("dependencies of curl.se = %q", got)
+	}
+	press(t, b, "\t")
+	// Nothing in the fixture needs curl.se, and an empty third view is the
+	// honest answer rather than a reason to skip the state.
+	if got := strings.Join(b.rows(), " "); got != "" {
+		t.Errorf("dependents of curl.se = %q, want none", got)
+	}
+	press(t, b, "\t")
+	if got := strings.Join(b.rows(), " "); got != "curl.se/ca-certs" {
+		t.Errorf("tab did not come back round: %q", got)
+	}
+}
+
+// AND THE THIRD VIEW HAS CONTENT WHERE THERE IS SOME — an empty list is
+// also what a view that silently fell back to names would NOT show, so the
+// cycle is checked on a node that really has dependents.
+func TestTabReachesTheDependentsOfANodeThatHasSome(t *testing.T) {
+	b := &browser{cat: browseCat(), at: "openssl.org"}
+	press(t, b, "\t\t") // names → dependencies → dependents
+	if got := strings.Join(b.rows(), " "); got != "curl.se" {
+		t.Errorf("dependents of openssl.org = %q, want curl.se", got)
+	}
+	// THE HEADER SAYS WHICH WAY YOU ARE FACING. A cycle whose state is
+	// invisible is a guess on every keystroke.
+	//
+	// ⛔ ON THE HEADER LINE, not anywhere on the screen. The help line at
+	// the bottom reads "tab names ⇄ dependencies ⇄ dependents", so a
+	// Contains over the whole screen passes with an EMPTY header label —
+	// it matches the help. Mutating the label to "" and watching this stay
+	// green is how that was found.
+	var screen bytes.Buffer
+	b.render(&screen, 24)
+	head, _, _ := strings.Cut(screen.String(), "\r\n")
+	if !strings.Contains(head, "dependents") {
+		t.Errorf("the header does not say the view: %q", head)
+	}
+}
+
+// WALKING UP STAYS WALKING UP. Descending from a dependents list follows
+// the graph further that way — who needs the thing that needs it — and
+// resetting to names would make the second step undo the first.
+//
+// ⛔ THE DEPENDENT MUST BE A LEAF. Descending onto a node that HAS children
+// leaves the view alone anyway, so the first version of this test — which
+// landed on curl.se — could not tell the early return from its absence.
+// Its own catalogue, so the shape is part of the test rather than a
+// property of a shared fixture somebody may change.
+func TestDescendingFromDependentsKeepsWalkingUp(t *testing.T) {
+	cat := bottle.Catalog{Projects: []bottle.CatalogProject{
+		{Project: "leaf.org", Versions: []string{"1.0"}, Deps: []string{"zlib.net"}},
+		{Project: "zlib.net", Versions: []string{"1.3.2"}},
+	}}
+	withCatalog(t, cat, nil)
+	b := &browser{cat: cat, at: "zlib.net"}
+	press(t, b, "\t\t") // → dependents of zlib.net
+	if got := strings.Join(b.rows(), " "); got != "leaf.org" {
+		t.Fatalf("dependents of zlib.net = %q", got)
+	}
+	if kids := cat.Children("leaf.org"); len(kids) != 0 {
+		t.Fatalf("the fixture's dependent has %d children — this test cannot see the defect", len(kids))
+	}
+	press(t, b, "\r")
+	if b.at != "leaf.org" {
+		t.Fatalf("at=%q", b.at)
+	}
+	if b.view != viewDependents {
+		t.Errorf("descending from dependents switched to %v", b.view)
 	}
 }

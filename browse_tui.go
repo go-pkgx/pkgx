@@ -42,7 +42,7 @@ var browseKeys = []struct{ key, does string }{
 	{"↑ ↓ / k j", "move"},
 	{"→ / l / enter", "descend"},
 	{"← / h", "back"},
-	{"tab", "names ⇄ dependencies"},
+	{"tab", "names ⇄ dependencies ⇄ dependents"},
 	{"/", "search"},
 	{"space", "pin for the exit line"},
 	{"q", "quit, printing what is pinned"},
@@ -98,7 +98,7 @@ type browser struct {
 	cat     bottle.Catalog
 	src     string
 	at      string   // the node whose children are listed
-	deps    bool     // dependencies instead of names
+	view    view     // names, dependencies, or dependents
 	sel     int      // which row
 	filter  string   // the / search
 	pinned  []string // what q will print
@@ -114,8 +114,12 @@ func (b *browser) rows() []string {
 		for _, h := range b.cat.Search(b.filter) {
 			out = append(out, h.Project)
 		}
-	case b.deps:
+	case b.view == viewDeps:
 		for _, n := range b.cat.DepTree(strings.TrimSuffix(b.at, "/"), 1) {
+			out = append(out, n.Project)
+		}
+	case b.view == viewDependents:
+		for _, n := range b.cat.Dependents(strings.TrimSuffix(b.at, "/"), 1) {
 			out = append(out, n.Project)
 		}
 	default:
@@ -174,13 +178,21 @@ func (b *browser) enter() {
 	if len(rows) == 0 {
 		return
 	}
+	was := b.view
 	b.at, b.filter, b.sel = rows[b.sel], "", 0
+	// WALKING UP STAYS WALKING UP. Descending from a dependents list means
+	// following the graph further in that direction — "who needs the thing
+	// that needs it" — and resetting to names there would make the second
+	// step undo the first.
+	if was == viewDependents {
+		return
+	}
 	// A node with children lists them; a leaf has none, and switching to
 	// its dependencies is what "descend" means there. Deciding here rather
 	// than making the reader press tab is the whole difference between a
 	// browser and a pair of commands.
 	if len(b.cat.Children(b.at)) == 0 {
-		b.deps = true
+		b.view = viewDeps
 	}
 }
 
@@ -191,8 +203,8 @@ func (b *browser) render(w io.Writer, height int) {
 	swept := knowsVersions(b.cat)
 
 	head := nodeLabel(b.at)
-	if b.deps && b.filter == "" {
-		head += "  (dependencies)"
+	if b.view != viewNames && b.filter == "" {
+		head += b.view.label()
 	}
 	if b.filter != "" {
 		head = fmt.Sprintf("search %q", b.filter)
@@ -259,3 +271,34 @@ var (
 	termRestore    = term.Restore
 	termGetSize    = term.GetSize
 )
+
+// view is what the current node shows. Three, not two.
+//
+// `tab` used to flip a bool between names and dependencies, which covered
+// the two things a node has UNDER it. The third — who needs this — is the
+// question asked before CHANGING something, and in a browser it is the
+// same gesture: stand on a node and look the other way. Cycling one key
+// rather than adding a second keeps the help line to one entry, and the
+// header says which way you are facing so the cycle is never a guess.
+type view int
+
+const (
+	viewNames view = iota
+	viewDeps
+	viewDependents
+)
+
+func (v view) next() view { return (v + 1) % 3 }
+
+// label is what the header adds. Names get nothing: a node listing what it
+// contains is the resting state, and labelling it would put a word on
+// every screen to describe the absence of a mode.
+func (v view) label() string {
+	switch v {
+	case viewDeps:
+		return "  (dependencies)"
+	case viewDependents:
+		return "  (dependents — who needs this)"
+	}
+	return ""
+}

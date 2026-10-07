@@ -144,7 +144,7 @@ func applyKey(b *browser, k key, in *bufio.Reader, stderr io.Writer) bool {
 	case keyLeft:
 		b.up()
 	case keyTab:
-		b.deps = !b.deps
+		b.view = b.view.next()
 		b.sel = 0
 	case keySpace:
 		if len(rows) > 0 {

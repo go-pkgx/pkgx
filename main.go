@@ -91,8 +91,8 @@ usage:
                                      crates.io/ripgrep, which no guess at the
                                      project name reaches. Offline
   pkgx browse [node]                 walk the tree full-screen: arrows to move
-                                     and descend, tab for names vs
-                                     dependencies, / to search, space to pin,
+                                     and descend, tab cycles names,
+                                     dependencies and dependents, / searches, space pins,
                                      q to quit printing what you pinned — so
                                      pkgx +$(pkgx browse) composes. Reads the
                                      cached catalogue, so no network; without
