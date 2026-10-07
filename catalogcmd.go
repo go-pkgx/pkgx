@@ -124,6 +124,16 @@ func catalogStatus(stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "%s\n", p)
 	fmt.Fprintf(stdout, "%d project(s), %d with dependencies, %s\n",
 		len(c.Projects), withDeps, c.Age(time.Now()))
+	// SAY IT WHEN SOMETHING WAS DROPPED. bottle removes version strings it
+	// cannot read rather than refusing the file — a version reaches a
+	// catalogue from an upstream recipe, and refusing would hand a recipe
+	// author a switch that turns off every <TAB> for everybody. But a
+	// guard that quietly removes things leaves a reader comparing a short
+	// list against their memory, and on a catalogue our own factory
+	// published this count should never be anything but zero.
+	if c.Dropped > 0 {
+		fmt.Fprintf(stdout, "%d version string(s) were unreadable and are not listed\n", c.Dropped)
+	}
 	return 0
 }
 
