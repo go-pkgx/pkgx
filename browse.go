@@ -196,6 +196,11 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	tree := fs.Bool("tree", false, "descend through the dependencies, not just the first level")
 	depth := fs.Int("depth", 0, "how far --tree descends; 0 is no limit")
+	// THE OTHER DIRECTION, as a flag on the same command rather than a
+	// command of its own: it is the same question about the same node —
+	// what is around it — and the flag says which way to look. `browse`
+	// already treats the two as one view with a key to flip it.
+	dependents := fs.Bool("dependents", false, "who NEEDS this, instead of what it needs")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -204,7 +209,14 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 		prefix = fs.Arg(0)
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(stderr, "pkgx: usage: pkgx ls [--tree] [--depth N] [node]")
+		fmt.Fprintln(stderr, "pkgx: usage: pkgx ls [--tree] [--depth N] [--dependents] [node]")
+		return 2
+	}
+	if *dependents && prefix == "" {
+		// "Who needs nothing in particular" has no answer, and listing
+		// every project with its dependents would be the whole catalogue
+		// printed sideways.
+		fmt.Fprintln(stderr, "pkgx: --dependents needs a project: pkgx ls --dependents openssl.org")
 		return 2
 	}
 	cat, src, err := browseCatalog(bottle.Dir())
@@ -243,11 +255,33 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 		if !*tree {
 			d = 1
 		}
-		sub := cat.DepTree(node, d)
-		if len(sub) == 0 {
-			fmt.Fprintln(stdout, "  (declares no runtime dependencies)")
+		var sub []bottle.DepNode
+		if *dependents {
+			sub = cat.Dependents(node, d)
+			if len(sub) == 0 {
+				// Not an error and not a surprise: most leaves of a pantry
+				// are nobody's dependency, and the sentence says the
+				// catalogue was read rather than leaving a blank.
+				fmt.Fprintln(stdout, "  (nothing in this catalogue needs it)")
+			}
+		} else {
+			sub = cat.DepTree(node, d)
+			if len(sub) == 0 {
+				fmt.Fprintln(stdout, "  (declares no runtime dependencies)")
+			}
 		}
 		printDepTree(stdout, sub, 1, swept)
+		if *dependents {
+			// WHAT THIS ANSWER IS NOT. The catalogue holds RUNTIME
+			// dependencies for ONE platform, so this is a runtime blast
+			// radius and not a rebuild set — a build dependency is paid
+			// once by the factory and is in nobody's closure. Said here
+			// rather than only in the docs, because the number is read
+			// where it is printed.
+			osn, arch := bottle.HostSlug()
+			fmt.Fprintf(stdout, "\nruntime dependents on %s/%s; a build-only user is in no catalogue\n", osn, arch)
+			return 0
+		}
 		// A namespace of the same name is still worth naming, or
 		// `curl.se/ca-certs` becomes unreachable from `curl.se`.
 		if kids := cat.Children(node); len(kids) > 0 {
@@ -484,6 +518,7 @@ var subcommandCompletions = []completion{
 	{"ls", "what is available under a node"},
 	{"catalog", "which catalogue is here; `catalog update` fetches one"},
 	{"search", "find a package by name or by a command it provides"},
+	{"why", "the shortest path by which one project needs another"},
 	{"browse", "walk the tree full-screen"},
 	{"env", "environments: init, load, unload, purge, avail, show, import"},
 	{"compat", "how much of a package set resolves under a base"},
