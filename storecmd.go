@@ -53,11 +53,27 @@ func runStore(args []string, stdout, stderr io.Writer) int {
 	}
 	dir := bottle.Dir()
 	entries, err := bottle.ScanStore(dir)
+	// EMPTY AND ABSENT GET THE SAME SENTENCE, because the difference is the
+	// code's business and not the reader's.
+	//
+	// A FROM scratch image ships a catalogue and no bottles, so its store
+	// directory EXISTS and holds nothing. The first version printed
+	//
+	//	/pkgx
+	//
+	//	0 B over 0 version(s) of 0 project(s)
+	//
+	// which is correct and tells nobody anything. Found by running it in
+	// the image rather than by reading the function.
+	if err == nil && len(entries) == 0 {
+		fmt.Fprintf(stdout, "%s\nnothing here yet — a store fills up the first time pkgx runs something\n", dir)
+		return 0
+	}
 	if err != nil {
 		if os.IsNotExist(err) {
-			// NOT AN ERROR. An absent store is the state of every fresh
-			// machine, and the useful thing to print is where it would be.
-			fmt.Fprintf(stdout, "%s\nnothing here yet — a store appears the first time pkgx runs something\n", dir)
+			// An absent store is the state of every fresh machine, and the
+			// useful thing to print is where it would be.
+			fmt.Fprintf(stdout, "%s\nnothing here yet — a store fills up the first time pkgx runs something\n", dir)
 			return 0
 		}
 		fmt.Fprintf(stderr, "pkgx: %s: %v\n", dir, err)

@@ -149,3 +149,32 @@ func TestHumanReadsAsAPersonReads(t *testing.T) {
 		}
 	}
 }
+
+// A STORE THAT EXISTS AND HOLDS NOTHING gets the same sentence as one that
+// is not there. The difference is the code's business, not the reader's.
+//
+// This is the FROM scratch case: the image ships a catalogue and no
+// bottles, so $PKGX_DIR exists and has no projects under it. The first
+// version printed "0 B over 0 version(s) of 0 project(s)", which is correct
+// and tells nobody anything — found by running it in the image, not by
+// reading the function.
+func TestStoreThatExistsButIsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "catalog"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog", "linux-aarch64.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PKGX_DIR", dir)
+	var out, errb bytes.Buffer
+	if code := runStore(nil, &out, &errb); code != 0 {
+		t.Fatalf("code=%d err=%s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "nothing here yet") {
+		t.Errorf("an empty store printed:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "0 version(s)") {
+		t.Errorf("an empty store was reported as a total of nothing:\n%s", out.String())
+	}
+}
