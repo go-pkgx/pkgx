@@ -254,7 +254,7 @@ gnu.org — 54
   gnu.org/gcc                              no bottle here
  +gnu.org/make                             4.4.1
 
-↑ ↓ / k j move · → / l / enter descend · ← / h back · tab names ⇄ dependencies
+↑ ↓ / k j move · → / l / enter descend · ← / h back · tab names ⇄ dependencies ⇄ dependents
 · / search · space pin for the exit line · q quit, printing what is pinned
 ```
 
@@ -268,6 +268,12 @@ read one node at a time is data nobody explores.
 **Descending into a leaf shows what it needs**, rather than making you press
 `tab`; that decision is the whole difference between a browser and a pair of
 commands.
+
+**`tab` cycles three views, not two**: what a node *contains*, what it *needs*,
+and **who needs it**. The third is the question asked before changing
+something, and in a browser it is the same gesture — stand on a node and look
+the other way. The header says which way you are facing, and descending from a
+dependents list keeps walking *up*: who needs the thing that needs it.
 
 `q` prints what you pinned on **stdout** while the screen goes to stderr, so
 `pkgx +$(pkgx browse)` composes instead of putting borders on a command line.
