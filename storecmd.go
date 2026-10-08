@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/go-pkgx/bottle"
 )
@@ -44,6 +45,19 @@ func runStore(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	bySize := fs.Bool("by-size", false, "largest first, instead of by name")
 	top := fs.Int("n", 0, "show only the first N projects (0 = all)")
+	// ROOTS THE CALLER NAMES, because there are none to find.
+	//
+	// guix's rule is the one copied here: what is reachable from a root is
+	// live, everything else is dead — and the roots are explicit. There is
+	// no profile in this design, so the only honest root set is one handed
+	// in, and a LOCK is already exactly that: it pins the whole closure,
+	// not only what somebody typed, so membership needs no graph walk and
+	// no network.
+	//
+	// An environment would not do. It names constraints, which have to be
+	// resolved against the registry, and this command works offline.
+	var roots stringList
+	fs.Var(&roots, "root", "a `bk lock` file whose pins are live; repeatable")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -52,6 +66,18 @@ func runStore(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	dir := bottle.Dir()
+	// THE ROOTS ARE READ BEFORE THE STORE IS WALKED. A mistyped lock path
+	// should cost a moment, not the eight seconds it takes to scan 41 GiB
+	// and then be told the arguments were wrong.
+	var locks []bottle.Lock
+	for _, p := range roots {
+		l, err := bottle.ReadLock(p)
+		if err != nil {
+			fmt.Fprintf(stderr, "pkgx: --root %s: %v\n", p, err)
+			return 2
+		}
+		locks = append(locks, l)
+	}
 	entries, err := bottle.ScanStore(dir)
 	// EMPTY AND ABSENT GET THE SAME SENTENCE, because the difference is the
 	// code's business and not the reader's.
@@ -137,6 +163,19 @@ func runStore(args []string, stdout, stderr io.Writer) int {
 		// for exactly these, and this command has no way to know.
 		fmt.Fprintf(stdout, "%s is in versions that are not the newest present — which is not the same as unused\n", human(older))
 	}
+	if len(roots) > 0 {
+		live, dead := bottle.LiveFromLocks(entries, locks)
+		lb, lv, _, _ := bottle.StoreTotals(live)
+		db, dv, _, _ := bottle.StoreTotals(dead)
+		fmt.Fprintf(stdout, "\nagainst %d root(s): %s live over %d version(s), %s in %d version(s) no root needs\n",
+			len(roots), human(lb), lv, human(db), dv)
+		// WHOSE ROOTS, SAID EVERY TIME. Name a different lock and a
+		// different half of the store is dead; the judgement is the
+		// caller's and the report has to hand it back rather than imply
+		// the store has an opinion. guix says the same thing by making
+		// `--list-dead` a listing and `gc` a separate command.
+		fmt.Fprintln(stdout, "dead here means NOT REACHABLE FROM THE ROOTS YOU NAMED, and nothing is removed")
+	}
 	return 0
 }
 
@@ -155,3 +194,11 @@ func human(n int64) string {
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTP"[exp])
 }
+
+// stringList is a repeatable flag. Repeatable rather than
+// comma-separated, because these are PATHS and a comma is a legal
+// character in one.
+type stringList []string
+
+func (s *stringList) String() string     { return strings.Join(*s, ",") }
+func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }

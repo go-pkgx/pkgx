@@ -178,3 +178,73 @@ func TestStoreThatExistsButIsEmpty(t *testing.T) {
 		t.Errorf("an empty store was reported as a total of nothing:\n%s", out.String())
 	}
 }
+
+// AGAINST ROOTS THE CALLER NAMES — guix's rule, with a lock as the root
+// set. A lock pins the whole closure, so membership in it is reachability.
+func TestStoreAgainstARootLock(t *testing.T) {
+	dir := storeAt(t)
+	lock := filepath.Join(t.TempDir(), "seed.lock.hcl")
+	if err := os.WriteFile(lock, []byte(
+		"lockfile_version = 1\nplatform = \"linux/x86-64\"\n"+
+			"locked = {\n  \"llvm.org\" = { version = \"22.1.8\", spec = \"\" }\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_ = dir
+	var out, errb bytes.Buffer
+	if code := runStore([]string{"--root", lock}, &out, &errb); code != 0 {
+		t.Fatalf("code=%d err=%s", code, errb.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "against 1 root(s)") {
+		t.Errorf("the roots are not reported:\n%s", got)
+	}
+	// 1024 of llvm 22.1.8 is live; llvm 16.0.6 (512) and zlib (8192) are not.
+	if !strings.Contains(got, "1.0 KiB live over 1 version(s)") {
+		t.Errorf("the live total is wrong:\n%s", got)
+	}
+	if !strings.Contains(got, "8.5 KiB in 2 version(s) no root needs") {
+		t.Errorf("the dead total is wrong:\n%s", got)
+	}
+	// WHOSE ROOTS, SAID EVERY TIME. Name a different lock and a different
+	// half is dead; the report must hand that judgement back.
+	if !strings.Contains(got, "NOT REACHABLE FROM THE ROOTS YOU NAMED") {
+		t.Errorf("the report claims an opinion it does not have:\n%s", got)
+	}
+	if !strings.Contains(got, "nothing is removed") {
+		t.Errorf("the report does not say it deletes nothing:\n%s", got)
+	}
+}
+
+// WITHOUT --root THERE IS NO LIVE/DEAD LINE AT ALL, rather than a line
+// saying everything is dead. "Nothing is reachable from nothing" is true
+// and useless, and printing it would read as a verdict on the store.
+func TestStoreWithoutRootsSaysNothingAboutLive(t *testing.T) {
+	storeAt(t)
+	var out, errb bytes.Buffer
+	if code := runStore(nil, &out, &errb); code != 0 {
+		t.Fatal(code)
+	}
+	if strings.Contains(out.String(), "no root needs") {
+		t.Errorf("a live/dead verdict appeared with no roots:\n%s", out.String())
+	}
+}
+
+// A MISTYPED ROOT COSTS A MOMENT, NOT A SCAN. Walking 41 GiB takes eight
+// seconds; being told afterwards that the path was wrong is the kind of
+// thing that makes people stop using a command.
+func TestStoreRefusesABadRootBeforeScanning(t *testing.T) {
+	storeAt(t)
+	var out, errb bytes.Buffer
+	code := runStore([]string{"--root", filepath.Join(t.TempDir(), "absent.hcl")}, &out, &errb)
+	if code != 2 {
+		t.Errorf("code=%d, want 2", code)
+	}
+	if !strings.Contains(errb.String(), "absent.hcl") {
+		t.Errorf("the refusal does not name the file: %q", errb.String())
+	}
+	// Nothing was printed about the store, which is how "before scanning"
+	// is visible from outside.
+	if strings.Contains(out.String(), "version(s) of") {
+		t.Errorf("the store was scanned before the roots were read:\n%s", out.String())
+	}
+}

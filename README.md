@@ -284,6 +284,44 @@ Sizes are powers of 1024 and say so with the `i`. `du` counts blocks and
 this counts file sizes, so the two disagree twice over; naming the unit is
 the least a report can do about it.
 
+### And what any of it is for
+
+A size is not a decision. `--root` says what a lock needs:
+
+```console
+$ pkgx store --root seed.lock.hcl
+…
+41.2 GiB over 363 version(s) of 302 project(s)
+
+against 1 root(s): 12.3 MiB live over 7 version(s), 41.2 GiB in 356 version(s) no root needs
+dead here means NOT REACHABLE FROM THE ROOTS YOU NAMED, and nothing is removed
+```
+
+[`guix gc`][gc] draws the line this copies: *"any file reachable from a root is
+considered live and cannot be deleted; any other file is considered dead"* —
+and what makes that safe is that the **roots are explicit**, with `--list-live`
+reporting before `gc` removes.
+
+[gc]: https://guix.gnu.org/manual/html_node/Invoking-guix-gc.html
+
+**A lock is already a root set.** `pkgx --lock` pins every project in the
+closure, not only what you typed, so membership in it *is* reachability — no
+graph walk and no network. An **environment** would not do: it names
+constraints, which have to be resolved against the registry, and this works
+offline.
+
+Three things worth knowing:
+
+- the **version** counts, not just the project — llvm 16.0.6 is dead while
+  22.1.8 is live;
+- several `--root` flags **union**, because that is what *reachable from any of
+  them* means;
+- **without `--root` there is no live/dead line at all.** "Nothing is reachable
+  from nothing" is true and would read as a verdict on your disk.
+
+And a mistyped `--root` is refused **before** the store is walked — eight
+seconds over 41 GiB is too long to wait to be told the arguments were wrong.
+
 ## Walking the tree
 
 ```console
