@@ -86,6 +86,14 @@ usage:
                                      exists; ls and <TAB> then read the file,
                                      so they are instant and work offline
   pkgx catalog                       which catalogue is here, and how old
+  pkgx store [--by-size] [-n N]      what the bottle store holds: every version
+                                     an ephemeral run ever pulled, and its
+                                     size. Nothing removes one, so it only
+                                     grows. Reports and deletes NOTHING —
+                                     there are no roots here, so "older than
+                                     another version" is a fact about the
+                                     disk, not a claim that it is unused.
+                                     Walks the tree, so it costs seconds
   pkgx search [-n N] <text>          find a package by its name or by a COMMAND
                                      it provides: "pkgx search rg" finds
                                      crates.io/ripgrep, which no guess at the
@@ -165,6 +173,8 @@ func run(argv []string) int {
 		return runLs(argv[1:], os.Stdout, os.Stderr)
 	case "catalog":
 		return runCatalogCmd(argv[1:], os.Stdout, os.Stderr)
+	case "store":
+		return runStore(argv[1:], os.Stdout, os.Stderr)
 	case "why":
 		return runWhy(argv[1:], os.Stdout, os.Stderr)
 	case "search":

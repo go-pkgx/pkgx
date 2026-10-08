@@ -519,6 +519,7 @@ var subcommandCompletions = []completion{
 	{"catalog", "which catalogue is here; `catalog update` fetches one"},
 	{"search", "find a package by name or by a command it provides"},
 	{"why", "the shortest path by which one project needs another"},
+	{"store", "what this disk holds, and how much of it"},
 	{"browse", "walk the tree full-screen"},
 	{"env", "environments: init, load, unload, purge, avail, show, import"},
 	{"compat", "how much of a package set resolves under a base"},
