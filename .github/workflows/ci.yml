@@ -234,6 +234,26 @@ jobs:
   freebsd:
     name: test (FreeBSD, a kernel that is not Linux)
     runs-on: ubuntu-latest
+    # ⛔ BOUNDED, BECAUSE A VM LANE THAT HANGS COSTS SIX HOURS.
+    #
+    # 2026-10-07 the NetBSD lane ran 20:39 → 02:40 and was cancelled by
+    # GitHub's own job cap, without ever reaching a test. The VM action
+    # failed to apt-get install ovmf — the preinstalled index named a .deb
+    # the mirror had superseded:
+    #
+    #   Err:2 … ovmf all 2024.02-2ubuntu0.9   404  Not Found
+    #   apt-get install failed against the preinstalled index (exit 100);
+    #   refreshing it and retrying.
+    #
+    # The retry never returned. Six hours of a runner, a pull request held
+    # open overnight, and a CANCELLED lane — which this fleet reads as a
+    # failure, correctly, because it executed nothing.
+    #
+    # 25 minutes is several times the lane's honest duration and a small
+    # fraction of the cap. A bound does not fix an upstream flake; it
+    # decides what the flake costs. All three VM lanes carry it, because
+    # the one that hung was not special.
+    timeout-minutes: 25
     # Cross-compiling proves the code builds for an OS. It says nothing about
     # whether it WORKS there, and the bugs a compiler cannot see are the
     # interesting ones: a path convention, a syscall that behaves differently,
@@ -258,6 +278,7 @@ jobs:
   netbsd:
     name: test (NetBSD, a kernel that is not Linux)
     runs-on: ubuntu-latest
+    timeout-minutes: 25 # see the freebsd lane: a hang here cost six hours
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -272,6 +293,7 @@ jobs:
   openbsd:
     name: test (OpenBSD, the strictest kernel we can reach)
     runs-on: ubuntu-latest
+    timeout-minutes: 25 # see the freebsd lane: a hang here cost six hours
     # OpenBSD is the one most likely to find something: W^X is enforced, malloc
     # is deliberately hostile (junk-filling, guard pages), and syscall origin is
     # policed. Code that merely happens to work elsewhere tends to stop here.
