@@ -94,6 +94,14 @@ usage:
                                      another version" is a fact about the
                                      disk, not a claim that it is unused.
                                      Walks the tree, so it costs seconds
+  pkgx store --root <lock> ...       and what any of it is FOR: a lock pins
+                                     a whole closure, so it is a root set.
+                                     Reports live against dead as guix gc
+                                     --list-live does — and like it,
+                                     removes NOTHING. "Dead" means not
+                                     reachable from the roots YOU named;
+                                     name another lock and another half is
+                                     dead. Repeatable; offline
   pkgx search [-n N] <text>          find a package by its name or by a COMMAND
                                      it provides: "pkgx search rg" finds
                                      crates.io/ripgrep, which no guess at the
