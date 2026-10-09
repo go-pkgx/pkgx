@@ -495,7 +495,7 @@ func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 // nothing wrong with either.
 func poseThenCompose(closure []bottle.Resolved, dir, libPath string) []string {
 	if posesLoader() {
-		if loader := bottle.FindLoader(dir); loader != "" {
+		if loader := findLoader(dir); loader != "" {
 			setupRootfs(loader, "")
 		}
 	}
@@ -510,6 +510,21 @@ func poseThenCompose(closure []bottle.Resolved, dir, libPath string) []string {
 // which is this machine — so the assertion that mattered ran nowhere I could
 // see it, and a skipped test is not a test.
 var posesLoader = func() bool { return bottle.GOOS() == "linux" }
+
+// findLoader locates the pkgx glibc loader in an installed closure.
+//
+// A seam for the same reason as posesLoader, and discovered the same way.
+// bottle.LoaderName() is EMPTY on the architectures that have no canonical
+// ld-linux name of their own — riscv64, ppc64le and loong64 among them — so a
+// test that built its fixture from it created no loader there and asserted on
+// a step that never ran. The qemu lanes caught it:
+//
+//	--- FAIL: TestTheLoaderIsPosedBeforeTheEnvironmentIsComposed
+//	    both steps did not run: [ask]
+//
+// which is also the fact worth stating: on those architectures pkgx poses
+// nothing, and the ordering this file exists for is a no-op.
+var findLoader = bottle.FindLoader
 
 // runEnv builds the child environment.
 //
