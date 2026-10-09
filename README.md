@@ -711,6 +711,36 @@ to auto-complete the implicit libc/gcc closure the pantry graph omits, then
 execs through the pkgx glibc loader so the program and its children resolve.
 BSD-3-Clause.
 
+### The loader is posed before the environment is composed
+
+That order is load-bearing, and getting it wrong is how every ELF stopped
+running on `FROM scratch`.
+
+glibc's bottle puts `libc.so.6` in `lib/glibc-2.44/`; `lib/` itself holds
+nothing. That versioned directory reaches `LD_LIBRARY_PATH` only when the
+loader that will read it is **ours** — exporting it to a host loader pairs two
+halves of different glibcs and fails on `__pointer_chk_guard`, which once took
+the s390x lane down. The test for "is it ours" reads `/lib` and `/lib64`.
+
+So composing the environment *before* posing the loader asks the question
+before the answer exists. Measured 2026-10-09 in a container whose only file
+was the pkgx binary:
+
+```sh
+$ pkgx stedolan.github.io/jq -n '1+1'
+…/jq: error while loading shared libraries: libm.so.6: cannot open shared
+object file: No such file or directory
+```
+
+Every ELF, not one package: `+gnu.org/coreutils -- env` died the same way on
+`libc.so.6`, and `pkgx --lock` could not run a lock at all. Supplying the same
+path from outside the container made the identical command print `2`, which is
+what located it.
+
+The quiet part: `pkgx +jq` **printed** a complete environment the whole time,
+because the print path already posed the loader first. Reading the two outputs
+side by side showed nothing wrong with either; only running the second one did.
+
 ### Where it is proven to work
 
 CI builds ten targets — linux, darwin and windows on amd64 and arm64, plus

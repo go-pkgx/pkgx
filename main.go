@@ -465,9 +465,66 @@ func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 	// because only yt-dlp's own bin was on PATH. `pkgx +yt-dlp.org` with no
 	// command already printed the full closure PATH — the run form simply
 	// composed a different one.
-	env := runEnv(closure, dir, libPath)
+	env := poseThenCompose(closure, dir, libPath)
 	return runELF(binPath, args, env, libPath, dir)
 }
+
+// poseThenCompose puts the loader at its canonical path and THEN composes the
+// environment. The order is the entire content of this function, which is why
+// it is one.
+//
+// ⛔ composeEnv adds glibc's VERSIONED lib dir — `lib/glibc-2.44`, where
+// libc.so.6 actually is, `lib/` holding nothing else — only
+// `if loaderIsOurs(dir)`, and that function READS /lib and /lib64. Composing
+// first and posing the loader afterwards asks the question before the answer
+// exists, so on a FROM-scratch image the child was handed an LD_LIBRARY_PATH
+// with no libc in it:
+//
+//	$ pkgx stedolan.github.io/jq -n '1+1'
+//	…/jq: error while loading shared libraries: libm.so.6: cannot open
+//	shared object file: No such file or directory
+//
+// Measured 2026-10-09, and proved by supplying the same path from outside the
+// container, which makes the identical command print 2. Every ELF was
+// affected, not one package: `+gnu.org/coreutils -- env` died the same way on
+// libc.so.6, and `pkgx --lock` could not run a lock at all.
+//
+// The `+pkg` print path already did it in this order. That is what made the
+// defect so quiet: `pkgx +jq` printed a COMPLETE environment while `pkgx jq`
+// ran with an incomplete one, so reading the two outputs side by side showed
+// nothing wrong with either.
+func poseThenCompose(closure []bottle.Resolved, dir, libPath string) []string {
+	if posesLoader() {
+		if loader := findLoader(dir); loader != "" {
+			setupRootfs(loader, "")
+		}
+	}
+	return runEnv(closure, dir, libPath)
+}
+
+// posesLoader is "this platform resolves shared libraries through an ELF
+// loader at a canonical path".
+//
+// A seam, so the ordering above can be tested on a machine that is not linux.
+// Written as one because the first version of that test skipped on darwin —
+// which is this machine — so the assertion that mattered ran nowhere I could
+// see it, and a skipped test is not a test.
+var posesLoader = func() bool { return bottle.GOOS() == "linux" }
+
+// findLoader locates the pkgx glibc loader in an installed closure.
+//
+// A seam for the same reason as posesLoader, and discovered the same way.
+// bottle.LoaderName() is EMPTY on the architectures that have no canonical
+// ld-linux name of their own — riscv64, ppc64le and loong64 among them — so a
+// test that built its fixture from it created no loader there and asserted on
+// a step that never ran. The qemu lanes caught it:
+//
+//	--- FAIL: TestTheLoaderIsPosedBeforeTheEnvironmentIsComposed
+//	    both steps did not run: [ask]
+//
+// which is also the fact worth stating: on those architectures pkgx poses
+// nothing, and the ordering this file exists for is a no-op.
+var findLoader = bottle.FindLoader
 
 // runEnv builds the child environment.
 //
