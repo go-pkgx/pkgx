@@ -503,3 +503,57 @@ func TestAnUnwritableIndexWarnsOnUpdateAndFailsOnReindex(t *testing.T) {
 		}
 	})
 }
+
+// ⛔ THE INDEX IS A SECOND READER OF THE SAME DATA AND MUST APPLY THE SAME
+// CHECKS.
+//
+// Demonstrated 2026-10-11, before readNameIndex validated names: an index
+// naming `../outside` completed to
+//
+//	../outside	1.0  ✓ 9.9.9
+//
+// and that `✓ 9.9.9` is a directory OUTSIDE $PKGX_DIR, reported as installed —
+// because lsNote asks bottle.InstalledVersions, which does
+// filepath.Join(dir, project). bottle.UnmarshalCatalog refuses the name
+// outright; this reader built a Catalog by hand and skipped the refusal.
+//
+// The test is a PAIR: the traversing name is refused, and a real nested
+// project name (`x.org/protocol/xcb`, which contains slashes and must stay
+// legal) is accepted — a validator that refused everything would pass the
+// first half and break the tool.
+func TestTheIndexRefusesANameTheCatalogueParserWouldRefuse(t *testing.T) {
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(outside, "v9.9.9"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("a traversing name is refused", func(t *testing.T) {
+		_, jsonPath, names := indexStore(t, threeProjects(), true)
+		body := fmt.Sprintf("%s %d %d 1\n../%s\t1.0\n",
+			nameIndexMagic, nameIndexVersion, jsonSize(t, jsonPath), filepath.Base(outside))
+		writeIndexFile(t, names, body)
+		if _, ok := readNameIndex(names, jsonPath); ok {
+			t.Fatal("accepted an index naming a path outside the store")
+		}
+		// And the same name through the CATALOGUE parser, so the two readers
+		// are shown to agree rather than assumed to.
+		bad := []byte(`{"generated":"2026-10-11T00:00:00Z","projects":[{"project":"../x","versions":["1.0"]}]}`)
+		if _, err := bottle.UnmarshalCatalog(bad); err == nil {
+			t.Error("the catalogue parser accepts it too — then this guard is in the wrong place")
+		}
+	})
+
+	t.Run("a real nested project name is accepted", func(t *testing.T) {
+		cat := bottle.Catalog{Projects: []bottle.CatalogProject{
+			{Project: "x.org/protocol/xcb", Versions: []string{"1.17.0"}},
+		}}
+		_, jsonPath, names := indexStore(t, cat, true)
+		got, ok := readNameIndex(names, jsonPath)
+		if !ok {
+			t.Fatal("refused a legitimate nested project name")
+		}
+		if len(got.Projects) != 1 || got.Projects[0].Project != "x.org/protocol/xcb" {
+			t.Errorf("projects = %+v", got.Projects)
+		}
+	})
+}

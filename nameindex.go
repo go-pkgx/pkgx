@@ -145,7 +145,24 @@ func parseNameIndex(r io.Reader, jsonBytes int64) (bottle.Catalog, bool) {
 		line, err := br.ReadString('\n')
 		if line = strings.TrimRight(line, "\n"); line != "" {
 			name, ver, _ := strings.Cut(line, "\t")
-			if name == "" {
+			// ⛔ THE SAME VALIDATOR THE CATALOGUE PARSER USES, and this is
+			// the whole reason it is called here.
+			//
+			// Measured 2026-10-11, before this line existed: an index naming
+			// `../outside` completed to
+			//
+			//	../outside	1.0  ✓ 9.9.9
+			//
+			// and the `✓ 9.9.9` is a directory OUTSIDE $PKGX_DIR, reported as
+			// installed — because lsNote asks bottle.InstalledVersions, which
+			// does filepath.Join(dir, project). bottle.UnmarshalCatalog
+			// refuses that name outright ("has a `..` segment"); this reader
+			// built a Catalog by hand and so skipped the refusal.
+			//
+			// A fast path that reaches the same data must apply the same
+			// checks: the guard belongs to the DATA, not to whichever reader
+			// got there first.
+			if err := bottle.ValidateProjectName(name); err != nil {
 				return bottle.Catalog{}, false
 			}
 			p := bottle.CatalogProject{Project: name}

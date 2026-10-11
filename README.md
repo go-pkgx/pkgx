@@ -812,3 +812,27 @@ Windows gets its own lane rather than a build check: `windows-run` builds
 `pkgx.exe` on a real Windows runner, fabricates a Windows bottle, serves it,
 and asserts that `pkgx.exe` fetches it, execs the `.exe`, and propagates both
 its output and its exit code.
+
+### The audit that found a hole in it
+
+The index is a **second reader of the same data**, and the first version of it
+skipped a check the catalogue parser applies. Demonstrated rather than
+theorised: an index naming `../outside` completed to
+
+```
+../outside	1.0  ✓ 9.9.9
+```
+
+and that `✓ 9.9.9` is a directory **outside `$PKGX_DIR`**, reported as
+installed — because the note beside a completion asks
+`bottle.InstalledVersions`, which does `filepath.Join(dir, project)`.
+`bottle.UnmarshalCatalog` refuses the name outright (*"has a `..` segment"*);
+the index reader built its catalogue by hand and so never asked.
+
+The fix is to call `bottle.ValidateProjectName` — **the same validator**, not a
+second one. A fast path that reaches the same data must apply the same checks:
+the guard belongs to the data, not to whichever reader got there first. The
+regression test is a pair, because a validator that refused everything would
+pass the traversal half and break the tool: `../outside` is refused, and
+`x.org/protocol/xcb` — a real project whose name contains slashes — is
+accepted.
