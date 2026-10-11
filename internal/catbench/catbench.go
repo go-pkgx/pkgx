@@ -81,24 +81,52 @@ func main() {
 	must(err)
 	must(os.WriteFile(dst, b, 0o644))
 
+	// A SECOND store with the catalogue and nothing else.
+	//
+	// ⛔ THE BASELINE HAS TO ANSWER THE SAME QUESTION. The arms below used
+	// to compare a `before` with an EMPTY store — which completes nothing —
+	// against an `after` with a catalogue. The tool printed `(nothing)` in
+	// its answer column for that arm and the comparison still read as a
+	// regression, because 18 ms of answering nothing beats 25 ms of
+	// answering. Those arms were right for the change that INTRODUCED the
+	// catalogue and wrong for every change after it.
+	//
+	// So: json holds the catalogue only, and indexed holds the catalogue
+	// plus the completion name index. Both complete `gnu.o`; the difference
+	// between them is the one thing under test.
+	jsonOnly := filepath.Join(tmp, "store-json")
+	must(os.MkdirAll(filepath.Dir(catalogPath(after, jsonOnly)), 0o755))
+	must(os.WriteFile(catalogPath(after, jsonOnly), b, 0o644))
+
+	// The index, built the way a user's machine builds it — by asking the
+	// binary under test, not by writing the format here. A benchmark that
+	// produced the file itself would be a second implementation of it, and
+	// the first thing to drift.
+	must(reindex(after, store))
+
 	empty := filepath.Join(tmp, "empty")
 	must(os.MkdirAll(empty, 0o755))
 
 	arms := []arm{
-		// What a user has today: no catalogue concept, PKGX_DIST reachable
-		// on a normal machine. Here it is blackholed, which is what makes
-		// the fetch visible as time rather than as a traced syscall.
-		{"before (" + baseline + ")", before, []string{"PKGX_DIR=" + empty, "PKGX_DIST=" + blackhole}},
-		// The same binary with the registry REACHABLE, because the
-		// blackhole arm above measures the worst case and quoting only
-		// that would overstate the win. This is what the status quo
-		// actually costs on a working network.
-		{"before, real registry", before, []string{"PKGX_DIR=" + empty}},
-		// The target.
-		{"after  (this tree)", after, []string{"PKGX_DIR=" + store, "PKGX_DIST=" + blackhole}},
-		// And the state of a machine that has not run `catalog update`:
-		// it must be fast too, and say nothing.
-		{"after, no catalogue", after, []string{"PKGX_DIR=" + empty, "PKGX_DIST=" + blackhole}},
+		// THE BASELINE THAT ANSWERS: the shipped binary with a catalogue on
+		// disk, which is what a user who has run `catalog update` has. Every
+		// keystroke decodes the whole JSON here.
+		{"before, catalogue (" + baseline + ")", before, []string{"PKGX_DIR=" + jsonOnly, "PKGX_DIST=" + blackhole}},
+		// The target: catalogue plus name index.
+		{"after, catalogue + index", after, []string{"PKGX_DIR=" + store, "PKGX_DIST=" + blackhole}},
+		// ⛔ THE FALLBACK, MEASURED. The new binary against a store that has
+		// the catalogue and NO index — an image that shipped one file, or a
+		// store half-refreshed. It must answer the same thing, and it must
+		// not be slower than the baseline: the index may only add a faster
+		// path, never a cost on the path without it.
+		{"after, index removed (falls back)", after, []string{"PKGX_DIR=" + jsonOnly, "PKGX_DIST=" + blackhole}},
+		// The two arms that answer NOTHING, kept because they are the
+		// original question this tool was built for — "completion does no
+		// network" — and because the blackhole is what makes a fetch visible
+		// as time. Their answer column reads `(nothing)`, which is how a
+		// reader knows not to compare them with the three above.
+		{"no catalogue, blackholed", before, []string{"PKGX_DIR=" + empty, "PKGX_DIST=" + blackhole}},
+		{"no catalogue, real registry", before, []string{"PKGX_DIR=" + empty}},
 	}
 
 	report(os.Stdout, arms, runs)
@@ -193,6 +221,24 @@ func catalogPath(bin, store string) string {
 		must(fmt.Errorf("`pkgx catalog` did not name a path: %q", out))
 	}
 	return p
+}
+
+// reindex builds the completion name index for a staged catalogue, by asking
+// the binary under test to do it.
+//
+// Its output is kept and printed on failure rather than discarded: an index
+// that was not written makes the "after" arm fall back to decoding the JSON,
+// which is the arm it is being compared against — the two would agree, and
+// the measurement would look like "the change does nothing" instead of like
+// "the setup did not happen".
+func reindex(bin, store string) error {
+	cmd := exec.Command(bin, "catalog", "reindex")
+	cmd.Env = append(os.Environ(), "PKGX_DIR="+store, "PKGX_CATALOG=")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("catalog reindex: %w: %s", err, out)
+	}
+	return nil
 }
 
 func ms(d time.Duration) string { return fmt.Sprintf("%.1f ms", float64(d.Microseconds())/1000) }

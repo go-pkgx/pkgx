@@ -19,7 +19,9 @@ import (
 // in.
 //
 // Before this, every TAB spawned a `pkgx` that fetched an OCI token and
-// pulled the ~200 KB catalogue bottle — once per press, with no reuse
+// pulled the catalogue bottle — 470 KB as measured 2026-10-11, and ~200 KB
+// when this was written, because `bk catalog --versions` grew it; the figure
+// carries its date for exactly that reason — once per press, with no reuse
 // between them, because each press is a fresh process. Measured at ~0.4 s
 // on the fast path, and that was the path where no catalogue existed and
 // the pull failed immediately.
@@ -37,9 +39,53 @@ func runCatalogCmd(args []string, stdout, stderr io.Writer) int {
 		return catalogStatus(stdout, stderr)
 	case len(args) == 1 && args[0] == "update":
 		return catalogUpdate(stdout, stderr)
+	case len(args) == 1 && args[0] == "reindex":
+		return catalogReindex(stdout, stderr)
 	}
-	fmt.Fprintln(stderr, "pkgx: usage: pkgx catalog [update]")
+	fmt.Fprintln(stderr, "pkgx: usage: pkgx catalog [update|reindex]")
 	return 2
+}
+
+// catalogReindex rebuilds the completion name index from the catalogue
+// ALREADY ON DISK. No network.
+//
+// It exists for the case catalogPath's own comment describes — "a scratch
+// image that ships one just drops the file in beside the packages". Such an
+// image has a catalogue and no index, so until now its completion fell back
+// to decoding the whole JSON on every keystroke: the slow path, in exactly
+// the environment that can least afford it and can least easily run
+// `catalog update`.
+//
+// It is also what makes the measurement reproducible. internal/catbench
+// stages a catalogue into a temporary store and then has to produce the index
+// the same way a user's machine would; calling this is that way, and a
+// benchmark that wrote the index itself would be a second implementation of
+// the format.
+func catalogReindex(stdout, stderr io.Writer) int {
+	osn, arch := bottle.HostSlug()
+	p := catalogPath(osn, arch)
+	b, err := osReadFile(p)
+	if err != nil {
+		fmt.Fprintf(stderr, "pkgx: catalog reindex: %v\n", err)
+		fmt.Fprintf(stderr, "pkgx: nothing to index — run: pkgx catalog update\n")
+		return 1
+	}
+	c, err := bottle.UnmarshalCatalog(b)
+	if err != nil {
+		fmt.Fprintf(stderr, "pkgx: catalog reindex: %v\n", err)
+		return 1
+	}
+	np := catalogNamesPath(osn, arch)
+	// ⛔ THE LENGTH OF WHAT WAS READ, not a fresh Stat. Between the read and
+	// the write the file could be replaced, and an index whose header
+	// described a catalogue it was not built from is the one thing this
+	// format exists to prevent.
+	if err := writeNameIndex(np, c, int64(len(b))); err != nil {
+		fmt.Fprintf(stderr, "pkgx: catalog reindex: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "%d name(s) → %s (what tab-completion reads)\n", len(c.Projects), np)
+	return 0
 }
 
 // catalogPath is where the fetched catalogue lives, per platform.
@@ -92,7 +138,23 @@ func catalogUpdate(stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "pkgx: catalog update:", err)
 		return 1
 	}
+	// The completion path's index, written AFTER the catalogue it describes
+	// and in the same operation. Its header records the catalogue's byte
+	// length, so a reader can tell in one Stat whether the two belong
+	// together — see nameindex.go.
+	//
+	// A failure here is a WARNING, not an error. The index only makes
+	// completion faster; without it completion reads the JSON, which is what
+	// it did before this existed. Failing the update would turn a performance
+	// file into a reason the catalogue does not refresh.
+	np := catalogNamesPath(osn, arch)
+	if err := writeNameIndex(np, c, int64(len(body))); err != nil {
+		fmt.Fprintf(stderr, "pkgx: catalog update: name index: %v (completion will read the catalogue instead)\n", err)
+		fmt.Fprintf(stdout, "%d project(s) → %s\n", len(c.Projects), p)
+		return 0
+	}
 	fmt.Fprintf(stdout, "%d project(s) → %s\n", len(c.Projects), p)
+	fmt.Fprintf(stdout, "%d name(s) → %s (what tab-completion reads)\n", len(c.Projects), np)
 	return 0
 }
 

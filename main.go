@@ -85,6 +85,9 @@ usage:
                                      command that asks the registry what
                                      exists; ls and <TAB> then read the file,
                                      so they are instant and work offline
+  pkgx catalog reindex               rebuild the name index <TAB> reads from
+                                     the catalogue already on disk, with NO
+                                     network — for an image that ships one
   pkgx catalog                       which catalogue is here, and how old
   pkgx store [--by-size] [-n N]      what the bottle store holds: every version
                                      an ephemeral run ever pulled, and its

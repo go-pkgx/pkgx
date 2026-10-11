@@ -16,8 +16,20 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.27.2'
+      # gofmt, which this lane did not check and its sibling in go-pkgx/bk
+      # does. Measured 2026-10-11: go-pkgx/bk#331 went red on gofmt alone,
+      # after a local check that ran the tests and the coverage profile and
+      # not the formatter — an insertion by hand had misaligned a struct
+      # literal, which nothing that COMPILES the code can see.
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - run: go vet ./...
       - run: go test -race -coverprofile=cov.out ./...
+      # Printed, not gated. This package is at 84% and a gate set at today's
+      # number is a gate that fails on the next honest error arm; `bk`'s
+      # 100%-of-blocks gate works there because that repository was built to
+      # it. What the number is for is the diff: a pull request that drops it
+      # is asking a question.
       - run: go tool cover -func=cov.out | tail -1
 
   build:

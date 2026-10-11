@@ -446,7 +446,7 @@ opens a socket.
 That line is not an optimisation, it is the difference between a completion
 you leave switched on and one you turn off. A `<TAB>` is a fresh process:
 there is no state between two presses, so a fetch on the read path is paid
-again on every press, in full — an OCI token and ~200 KB of catalogue, each
+again on every press, in full — an OCI token and the whole catalogue (470 KB in October 2026), each
 time. `guix pull` and `nix-channel --update` put the line in the same place.
 
 Measured, one press of `<TAB>` on `gnu.o`, median of five, with `PKGX_DIST`
@@ -468,6 +468,55 @@ published for darwin/aarch64. A successful one costs more, not less.
 ```sh
 go run ./internal/catbench . <catalog.json> 5 97f08e3
 ```
+
+### And it reads an index, not the catalogue
+
+Moving the fetch off the read path left one cost behind: every `<TAB>` decoded
+the whole catalogue. Measured on the real `linux-aarch64` catalogue —
+**481 803 bytes, 1908 projects** (the figure this README used to give as
+"~200 KB", which the catalogue outgrew when `bk catalog --versions` started
+sweeping):
+
+| what a press did | median |
+| --- | --- |
+| `ReadFile` + `UnmarshalCatalog` | 6.3–9.8 ms |
+| `ReadFile` of the JSON alone | 0.31 ms |
+| `json.Decoder`, decoding two fields | 5.1 ms |
+| **the name index** (38 KB), read + scan | **0.08 ms** |
+
+So the **decode** was all of it, and streaming only the two fields completion
+needs is merely twice as fast — not enough to matter. `pkgx catalog update`
+therefore also writes `catalog/<os>-<arch>.names`: one line per project, the
+name and the newest version, which is everything `<TAB>` shows. `ls`,
+`--tree`, `search` and `browse` keep reading the catalogue — they need
+dependencies and summaries, and none of them runs on a keystroke.
+
+**A derived file that can disagree with its source is a defect waiting for a
+reader**, so three things hold it honest: only `catalog update` and
+`catalog reindex` write it; its header records the catalogue's byte length and
+project count, both checked on read and both free; and a failed check is not an
+error — it falls back to the catalogue, which is the authority. The index can
+only make completion faster or make it do exactly what it did before.
+
+`pkgx catalog reindex` rebuilds it from the catalogue already on disk, with no
+network — for an image that **ships** a catalogue, which had no way to get an
+index and so took the slow path in the one environment that can least afford
+it.
+
+Measured in a `FROM scratch` container (one layer, 8.5 MB, nothing but the
+binary) with the network **off**, 300 runs per arm, all three back to back
+because a figure taken under a different load is not comparable — the same arm
+read 25.25 ms at load 89 and 3.78 ms at load 18:
+
+| arm | min | median | above the floor |
+| --- | --- | --- | --- |
+| the floor: `pkgx --version`, no catalogue read | 2.71 ms | 3.05 ms | — |
+| **completion, name index** | 3.07 ms | **3.78 ms** | **+0.73 ms** |
+| completion, decoding the catalogue | 5.97 ms | 6.50 ms | +3.45 ms |
+
+The catalogue read went from 3.45 ms to 0.73 ms above the cost of starting the
+process at all — which is now the dominant term, and is the Go runtime, not
+this program.
 
 re-measures it, building the `before` arm from that commit in a throwaway
 worktree rather than quoting a number from a commit message. **The baseline
