@@ -222,10 +222,30 @@ func parseNameIndexHeader(line string) (jsonBytes int64, count int, ok bool) {
 func completionCatalog(dir string) bottle.Catalog {
 	if os.Getenv("PKGX_CATALOG") == "" {
 		osn, arch := bottle.HostSlug()
-		if cat, ok := readNameIndex(catalogNamesPath(osn, arch), catalogPath(osn, arch)); ok {
+		if cat, ok := indexFor(catalogNamesPath(osn, arch), catalogPath(osn, arch)); ok {
 			return cat
 		}
 	}
 	cat, _, _ := browseCatalog(dir)
 	return cat
 }
+
+// indexFor is a SEAM, and it exists because adding this fast path made an
+// existing test depend on the machine it ran on.
+//
+// `catalogFor` is the seam a test fakes to say "this is the catalogue", and
+// `installedVersions` the one for "this is what is installed" — whose own
+// comment records the same lesson from the store side: "a browse test must
+// not read the store of whoever runs it... the suite passed or failed
+// depending on what the developer happened to have installed".
+//
+// The index was a THIRD read of the environment and neither seam covered it.
+// Measured 2026-10-11: TestCompletionCarriesTheMark passed in CI, where there
+// is no ~/.pkgx, and failed on a machine that had run `catalog reindex` —
+// `completionsFor` read the real index instead of the faked catalogue and
+// reported doxygen.nl's real version where the test expected "no bottle
+// here". Green on a clean machine is the worst way for this to fail.
+//
+// So the index is reachable through a seam of its own, and withCatalog
+// disables it alongside the store.
+var indexFor = readNameIndex

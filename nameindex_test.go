@@ -557,3 +557,56 @@ func TestTheIndexRefusesANameTheCatalogueParserWouldRefuse(t *testing.T) {
 		}
 	})
 }
+
+// ⛔ A COMPLETION TEST MUST NOT READ THE MACHINE IT RUNS ON.
+//
+// The completion path reads the name index before the catalogue, and that read
+// goes to the real $PKGX_DIR. So a test that faked `catalogFor` was silently
+// answered from whatever index the developer's machine held:
+// TestCompletionCarriesTheMark passed in CI, where there is no ~/.pkgx, and
+// failed here the moment this machine had run `pkgx catalog reindex`. Green on
+// a clean machine is the worst way for that to fail.
+//
+// This is the control. It plants an index that would give a DIFFERENT answer,
+// and asserts the faked catalogue wins — so the guard in withCatalog is shown
+// to work rather than assumed to.
+func TestAFakedCatalogueIsNotOverruledByARealIndex(t *testing.T) {
+	// A real index on disk, naming a project the faked catalogue does not.
+	dir := t.TempDir()
+	t.Setenv("PKGX_DIR", dir)
+	t.Setenv("PKGX_CATALOG", "")
+	planted := bottle.Catalog{Projects: []bottle.CatalogProject{
+		{Project: "from-the-machine.example", Versions: []string{"9.9.9"}},
+	}}
+	osn, arch := bottle.HostSlug()
+	if err := os.MkdirAll(filepath.Dir(catalogPath(osn, arch)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	b, err := bottle.MarshalCatalog(planted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(catalogPath(osn, arch), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeNameIndex(catalogNamesPath(osn, arch), planted, int64(len(b))); err != nil {
+		t.Fatal(err)
+	}
+	// Proof the planted index really would be read: without the guard, it is.
+	if cat, ok := readNameIndex(catalogNamesPath(osn, arch), catalogPath(osn, arch)); !ok ||
+		len(cat.Projects) != 1 || cat.Projects[0].Project != "from-the-machine.example" {
+		t.Fatalf("the planted index is not readable, so this control proves nothing: %+v %v", cat, ok)
+	}
+
+	withCatalog(t, bottle.Catalog{Projects: []bottle.CatalogProject{
+		{Project: "from-the-test.example", Versions: []string{"1.0"}},
+	}}, nil)
+
+	var got []string
+	for _, c := range completionsFor("from-the-") {
+		got = append(got, c.value)
+	}
+	if strings.Join(got, ",") != "from-the-test.example" {
+		t.Errorf("completions = %v, want only the faked catalogue's project", got)
+	}
+}
