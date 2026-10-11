@@ -34,6 +34,27 @@ func withCatalog(t *testing.T, c bottle.Catalog, err error) {
 	// have installed, and it was a test asserting "8.17.0, 1 under" that
 	// noticed, on a machine where curl.se was.
 	withInstalled(t, nil)
+	// ⛔ AND NO NAME INDEX, which is the same lesson a third time. The
+	// completion path reads catalog/<os>-<arch>.names before the catalogue,
+	// and that read goes to the real $PKGX_DIR — so a test that faked
+	// catalogFor was silently answered from whatever index the developer's
+	// machine had. TestCompletionCarriesTheMark passed in CI, where there is
+	// no ~/.pkgx, and failed the moment this machine had run
+	// `pkgx catalog reindex`.
+	//
+	// Saying "there is no index" rather than pointing it at a temporary
+	// directory: a test about the CATALOGUE should take the catalogue path,
+	// and a test about the index says so by faking indexFor itself.
+	withoutNameIndex(t)
+}
+
+// withoutNameIndex makes the completion path find no index, so it reads the
+// catalogue withCatalog just faked.
+func withoutNameIndex(t *testing.T) {
+	t.Helper()
+	prev := indexFor
+	indexFor = func(string, string) (bottle.Catalog, bool) { return bottle.Catalog{}, false }
+	t.Cleanup(func() { indexFor = prev })
 }
 
 // withInstalled answers "what does this machine have" from a map rather
