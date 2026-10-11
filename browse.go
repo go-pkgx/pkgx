@@ -52,7 +52,9 @@ import (
 // That is the whole contract, and it is the one thing completion needs: a
 // TAB spawns a fresh process, so anything this function does is paid again
 // on every press. It used to pull the catalogue bottle from the registry
-// here — an OCI token and ~200 KB, per press, never reused — which is a
+// here — an OCI token and the whole catalogue (470 KB as measured
+// 2026-10-11, and it was ~200 KB when this comment was written), per press,
+// never reused — which is a
 // completion nobody would leave switched on.
 //
 // `pkgx catalog update` is the only path that fetches. `guix pull` and
@@ -498,7 +500,13 @@ func completionsFor(word string) []completion {
 	// A completion says NOTHING about a failure. The other end is a shell's
 	// completion buffer and a diagnostic there lands in the user's prompt,
 	// so an unreadable catalogue simply offers no package names.
-	cat, _, _ := browseCatalog(bottle.Dir())
+	//
+	// And it reads the NAME INDEX rather than the catalogue, falling back to
+	// the catalogue when there is no usable index. Measured: the JSON decode
+	// was 6.3–9.8 ms of every keystroke and the index answers the same
+	// question in 0.08 ms. See nameindex.go for why a second file is safe
+	// here.
+	cat := completionCatalog(bottle.Dir())
 	for _, n := range cat.Complete(bare) {
 		v := n.Name
 		if plus {
