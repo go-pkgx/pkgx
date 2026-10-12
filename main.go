@@ -395,15 +395,33 @@ func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 	var runProject, program string
 	var args []string
 
+	// A bare word is a COMMAND, not a project: `pkgx hugo version` means
+	// gohugo.io. Resolved here rather than deeper down because the closure
+	// takes project names, and the mapper reads the catalogue only if some
+	// spec actually needs it — see command.go.
+	//
+	// On BOTH paths. `pkgx +hugo -- hugo version` is the same request in the
+	// other syntax, and a flag added to one of a pair is the half-a-pair
+	// defect this fleet has paid for before.
+	cmds := &commandMapper{dir: dir}
+
 	if len(plus) == 0 {
 		if len(rest) == 0 {
 			return fmt.Errorf("nothing to run (try --help)")
 		}
-		runProject, args = spec(rest[0]), rest[1:]
-		roots[project(rest[0])] = constraint(rest[0])
+		proj, cons, err := cmds.resolve(rest[0])
+		if err != nil {
+			return err
+		}
+		runProject, args = proj, rest[1:]
+		roots[proj] = cons
 	} else {
 		for _, p := range plus {
-			roots[project(p)] = constraint(p)
+			proj, cons, err := cmds.resolve(p)
+			if err != nil {
+				return err
+			}
+			roots[proj] = cons
 		}
 		if len(rest) > 0 {
 			program, args = rest[0], rest[1:]

@@ -39,6 +39,11 @@ func TestItCountsTheFieldTheFactoryWrites(t *testing.T) {
 		"with a bottle 2 (50.0%)",
 		"commands      3",
 		"namespaces    1",
+		// Zero here, and ONE in the fixture below. Without that pair this
+		// line would pass against a counter that always said zero — which
+		// is the answer the real catalogue gives, so the hollow version
+		// would have looked right forever.
+		"bare names    0",
 		"platforms     linux/aarch64",
 		"generated     2026-10-06T15:04:06Z",
 	} {
@@ -89,4 +94,21 @@ func write(t *testing.T, body string) string {
 		t.Fatal(err)
 	}
 	return p
+}
+
+// A project name with neither a dot nor a slash. The published pantry has
+// none — measured 0 of 1915 on 2026-10-12 — and `pkgx <command>` relies on
+// that: a bare word is taken as a COMMAND and resolved through `provides`.
+// So this counter is the instrument that would notice the day it stops being
+// true, and it needs a fixture where the answer is not zero.
+const withABareName = `{"generated":"2026-10-12T09:00:00Z","projects":[
+ {"project":"curl.se","versions":["8.20.0"]},
+ {"project":"notadomain","provides":["notadomain"]}
+]}`
+
+func TestItCountsABareProjectName(t *testing.T) {
+	out := run(t, withABareName)
+	if !strings.Contains(out, "bare names    1") {
+		t.Errorf("a project named %q was not counted as bare:\n%s", "notadomain", out)
+	}
 }

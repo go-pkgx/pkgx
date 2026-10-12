@@ -377,9 +377,55 @@ them.
 
 `nix search`, `guix search` and `spack list -s` all match a package's
 **description**, which is right for a collection that has descriptions.
-This pantry does not: of its 1907 recipes, **1592** declare the commands
-they provide and **six** carry a summary. A search over prose would find
-six packages.
+This pantry does not. Measured with `go run ./internal/catstat` over the
+published darwin/aarch64 catalogue of **2026-10-12**: of **1915** projects,
+**1588** (82.9%) declare the commands they provide — 4511 command names —
+and **six** carry a summary. A search over prose would find six packages.
+
+The figures carry their date and their instrument because they move. An
+earlier revision of this paragraph said "1907 recipes, 1592 declare" with
+neither, and by the time anyone compared, both numbers had changed and
+nothing said whether the difference was drift or a defect.
+
+### And the command runs, not just searches
+
+```console
+$ pkgx rg --version
+ripgrep 15.2.0
+
+$ pkgx jq --version
+jq-1.8.2
+```
+
+`rg` resolved to `crates.io/ripgrep` and `jq` to `stedolan.github.io/jq`,
+from an empty store, offline but for the bottles. A constraint rides along —
+`pkgx node@22 --version` is `nodejs.org` at 22 — and `+rg` works the same
+way, because the two syntaxes are one request.
+
+A bare word is a **command**; a project is always a domain or a
+domain/path, so the two cannot be confused — 0 of those 1915 project names
+lack both a dot and a slash, and `catstat` prints that count so the day it
+stops being true is noticed.
+
+This was reported from the field, and it is why the paragraph above is not
+the whole story: the mapping lived in the catalogue and only `search` read
+it, so `pkgx hugo version` answered *"no recipe for hugo in …pantry…"* —
+which reads as "go-pkgx does not know hugo" rather than "look under
+`provides`". Every `pkgx <tool>` habit, Taskfile and doc had to be
+rewritten with project names to work at all.
+
+Three things it will not do:
+
+- **Guess between two providers.** `provides` says what a project puts on
+  PATH, not who owns the name. Two candidates is an error naming both;
+  picking one would run the wrong program under the right name.
+- **Blame the pantry when there is no catalogue.** A bare word with no
+  catalogue says `run: pkgx catalog update`, because a bare word can never
+  be a project and a message about a missing *recipe* would be about the
+  wrong thing.
+- **Read the catalogue for a project name.** `pkgx +deps` runs inside every
+  factory build, in a loop; parsing 467 KB to notice that `gnu.org/bash`
+  contains a slash would be paid on every call for nothing.
 
 So the match is on names and on commands, ranked by **how** a thing
 matched rather than by how often — a command named exactly what you typed
