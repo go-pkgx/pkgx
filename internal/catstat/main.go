@@ -70,7 +70,15 @@ func report(w io.Writer, path string) error {
 		// zero dressed up as a finding.
 		return fmt.Errorf("%s: no projects", path)
 	}
-	var summaries, provides, bottled, deps, cmds int
+	// bareNames are project names with neither a dot nor a slash in them.
+	//
+	// Counted because a decision rests on it: `pkgx <command>` resolves a
+	// bare word through `provides` and must not do that for something that
+	// IS a project. Every pantry name is a domain or a domain/path, so the
+	// test is exact rather than a guess — but that is a property of the
+	// published DATA, and this is the instrument that can say so instead of
+	// the claim sitting in a comment nobody can check.
+	var summaries, provides, bottled, deps, cmds, bareNames int
 	namespaces := map[string]bool{}
 	platforms := map[string]bool{}
 	for _, p := range c.Projects {
@@ -89,6 +97,9 @@ func report(w io.Writer, path string) error {
 		}
 		if i := strings.Index(p.Project, "/"); i > 0 {
 			namespaces[p.Project[:i]] = true
+		}
+		if !strings.ContainsAny(p.Project, "./") {
+			bareNames++
 		}
 		for _, pl := range p.Platforms {
 			platforms[pl] = true
@@ -111,6 +122,7 @@ func report(w io.Writer, path string) error {
 	line("dependencies", deps)
 	fmt.Fprintf(w, "  commands      %d\n", cmds)
 	fmt.Fprintf(w, "  namespaces    %d\n", len(namespaces))
+	fmt.Fprintf(w, "  bare names    %d (project names with no dot and no slash)\n", bareNames)
 	return nil
 }
 
