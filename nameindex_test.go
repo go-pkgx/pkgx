@@ -365,8 +365,15 @@ func TestCatalogReindexRefusals(t *testing.T) {
 		}
 		// The usage line names BOTH subcommands, or reindex is a feature
 		// nobody can find.
-		if !strings.Contains(errb.String(), "update|reindex") {
-			t.Errorf("stderr = %q", errb.String())
+		//
+		// Asserted as two names rather than the literal "update|reindex":
+		// that spelling broke the moment `update` grew `[--platform os/arch]`
+		// between them, and what the line has to do is name them, not keep
+		// them adjacent.
+		for _, want := range []string{"update", "reindex"} {
+			if !strings.Contains(errb.String(), want) {
+				t.Errorf("usage does not name %q: %q", want, errb.String())
+			}
 		}
 	})
 }

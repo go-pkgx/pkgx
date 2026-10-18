@@ -293,3 +293,34 @@ func TestUsageMentionsCatalog(t *testing.T) {
 		}
 	}
 }
+
+// ⛔ A QUESTION ABOUT ANOTHER PLATFORM MUST BE ASKABLE AT ALL.
+//
+// `fetchCatalogFor` always took os and arch; only the command pinned them to
+// the host, and that one line made two measurements impossible from a darwin
+// machine: whether a darwin/x86-64 bottle starts (go-pkgx/packages#330), and
+// what `bk vulnfetch -catalog` reports for linux before wiring a CI job to
+// run it. An answer that needs a second machine is an answer nobody checks.
+func TestCatalogUpdateTakesAPlatform(t *testing.T) {
+	for _, bad := range []string{"linux", "", "/x86-64", "linux/"} {
+		var out, errb bytes.Buffer
+		if code := runCatalogCmd([]string{"update", "--platform", bad}, &out, &errb); code != 2 {
+			t.Errorf("--platform %q: code = %d, want 2", bad, code)
+		}
+		if !strings.Contains(errb.String(), "os/arch") {
+			t.Errorf("--platform %q: the error does not say the shape: %q", bad, errb.String())
+		}
+	}
+}
+
+// The usage names the flag, or it is a feature nobody can find — the same
+// reason the reindex subcommand is named there.
+func TestCatalogUsageNamesThePlatformFlag(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := runCatalogCmd([]string{"nonesuch"}, &out, &errb); code != 2 {
+		t.Fatalf("code = %d", code)
+	}
+	if !strings.Contains(errb.String(), "--platform") {
+		t.Errorf("usage does not name --platform: %q", errb.String())
+	}
+}
