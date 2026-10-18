@@ -70,12 +70,17 @@ func main() {
 	must(build(tree, "", after))
 	before := filepath.Join(tmp, "pkgx-before")
 	must(build(tree, baseline, before))
+	// The staging binary. See buildPkgs: `catalog` and `catalog reindex`
+	// are pkgs's verbs now, and asking pkgx for them would ask it to RUN a
+	// package called catalog.
+	stager := filepath.Join(tmp, "pkgs")
+	must(buildPkgs(tree, stager))
 
 	// The store the "after" arm reads: a real 1907-project catalogue at the
-	// path `pkgx catalog update` writes.
+	// path `pkgs catalog update` writes.
 	store := filepath.Join(tmp, "store")
 	must(os.MkdirAll(store, 0o755))
-	dst := catalogPath(after, store)
+	dst := catalogPath(stager, store)
 	must(os.MkdirAll(filepath.Dir(dst), 0o755))
 	b, err := os.ReadFile(catalog)
 	must(err)
@@ -95,14 +100,14 @@ func main() {
 	// plus the completion name index. Both complete `gnu.o`; the difference
 	// between them is the one thing under test.
 	jsonOnly := filepath.Join(tmp, "store-json")
-	must(os.MkdirAll(filepath.Dir(catalogPath(after, jsonOnly)), 0o755))
-	must(os.WriteFile(catalogPath(after, jsonOnly), b, 0o644))
+	must(os.MkdirAll(filepath.Dir(catalogPath(stager, jsonOnly)), 0o755))
+	must(os.WriteFile(catalogPath(stager, jsonOnly), b, 0o644))
 
 	// The index, built the way a user's machine builds it — by asking the
 	// binary under test, not by writing the format here. A benchmark that
 	// produced the file itself would be a second implementation of it, and
 	// the first thing to drift.
-	must(reindex(after, store))
+	must(reindex(stager, store))
 
 	empty := filepath.Join(tmp, "empty")
 	must(os.MkdirAll(empty, 0o755))
@@ -171,6 +176,28 @@ func describe(out string) string {
 	lines := strings.Split(out, "\n")
 	first := strings.SplitN(lines[0], "\t", 2)[0]
 	return fmt.Sprintf("%d candidate(s), first %q", len(lines), first)
+}
+
+// buildPkgs builds the `pkgs` binary from the working tree.
+//
+// ⛔ THE STAGING AND THE MEASUREMENT ARE NOW TWO BINARIES. What is measured
+// is still `pkgx gnu.o` — the completion on the hot path. But the staging
+// (`catalog` to learn the path, `catalog reindex` to build the index) moved
+// to `pkgs` when the verbs did, and a staging step run against pkgx would
+// ask it to RUN a package called catalog: the index would never be written,
+// the "after" arm would fall back to decoding the JSON, and the two arms
+// would agree. That reads as "the change does nothing" rather than as "the
+// setup did not happen", which is the one failure this file's comments
+// already warn about twice.
+//
+// Only the working tree's pkgs is built. The baseline arm is an OLD pkgx,
+// from before the split, which has no pkgs beside it — and the staging is
+// not what is being compared anyway.
+func buildPkgs(tree, out string) error {
+	c := exec.Command("go", "build", "-o", out, "./cmd/pkgs")
+	c.Dir = tree
+	c.Stderr = os.Stderr
+	return c.Run()
 }
 
 func build(tree, rev, out string) error {

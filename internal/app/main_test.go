@@ -509,17 +509,31 @@ func TestFormatFlagsNeedAPackageSet(t *testing.T) {
 	}
 }
 
-// `pkgx env` is the front-end's one entry point, and its failure modes must be
-// usage errors rather than a silent fall-through into "run a package called env".
+// `pkgs env` is the front-end's one entry point, and its failure modes must be
+// usage errors rather than a silent fall-through.
+//
+// ⛔ IT IS `pkgs`, AND THE OLD VERSION OF THIS TEST DID NOT MERELY FAIL — IT
+// REPLACED THE TEST BINARY. The comment here used to read "rather than a
+// silent fall-through into 'run a package called env'", which is now
+// exactly what pkgx is supposed to do: `gnu.org/coreutils` provides `env`,
+// upstream pkgx runs it, and running is syscall.Exec. So `run(["env",
+// "init"])` execve'd the system env, the Go test process ceased to exist
+// mid-suite, and `go test` reported FAIL with no failing test named and no
+// panic — just a stray `[: missing ']'` from a shell that was never ours.
+//
+// Which is why the pkgx half below goes through unknownVerb rather than
+// through run: asserting it end to end would exec something, and a test
+// that execs cannot report.
 func TestEnvVerb(t *testing.T) {
-	if code := run([]string{"env"}); code != 2 {
-		t.Errorf("bare `pkgx env` = %d, want 2", code)
+	asPkgs(t)
+	if code := Pkgs([]string{"env"}); code != 2 {
+		t.Errorf("bare `pkgs env` = %d, want 2", code)
 	}
-	if code := run([]string{"env", "nonsense"}); code != 2 {
+	if code := Pkgs([]string{"env", "nonsense"}); code != 2 {
 		t.Errorf("unknown env command = %d, want 2", code)
 	}
-	if code := run([]string{"env", "init"}); code != 0 {
-		t.Errorf("`pkgx env init` = %d, want 0", code)
+	if code := Pkgs([]string{"env", "init"}); code != 0 {
+		t.Errorf("`pkgs env init` = %d, want 0", code)
 	}
 }
 

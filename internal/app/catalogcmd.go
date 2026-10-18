@@ -44,14 +44,14 @@ func runCatalogCmd(args []string, stdout, stderr io.Writer) int {
 	case len(args) == 3 && args[0] == "update" && args[1] == "--platform":
 		osn, arch, ok := strings.Cut(args[2], "/")
 		if !ok || osn == "" || arch == "" {
-			fmt.Fprintf(stderr, "pkgx: catalog update --platform: %q is not os/arch\n", args[2])
+			fmt.Fprintf(stderr, pfx()+"catalog update --platform: %q is not os/arch\n", args[2])
 			return 2
 		}
 		return catalogUpdate(osn, arch, stdout, stderr)
 	case len(args) == 1 && args[0] == "reindex":
 		return catalogReindex(stdout, stderr)
 	}
-	fmt.Fprintln(stderr, "pkgx: usage: pkgx catalog [update [--platform os/arch]|reindex]")
+	fmt.Fprintln(stderr, pfx()+"usage: "+tool+" catalog [update [--platform os/arch]|reindex]")
 	return 2
 }
 
@@ -75,13 +75,13 @@ func catalogReindex(stdout, stderr io.Writer) int {
 	p := catalogPath(osn, arch)
 	b, err := osReadFile(p)
 	if err != nil {
-		fmt.Fprintf(stderr, "pkgx: catalog reindex: %v\n", err)
-		fmt.Fprintf(stderr, "pkgx: nothing to index — run: pkgx catalog update\n")
+		fmt.Fprintf(stderr, pfx()+"catalog reindex: %v\n", err)
+		fmt.Fprintln(stderr, pfx()+"nothing to index — run: "+tool+" catalog update")
 		return 1
 	}
 	c, err := bottle.UnmarshalCatalog(b)
 	if err != nil {
-		fmt.Fprintf(stderr, "pkgx: catalog reindex: %v\n", err)
+		fmt.Fprintf(stderr, pfx()+"catalog reindex: %v\n", err)
 		return 1
 	}
 	np := catalogNamesPath(osn, arch)
@@ -90,7 +90,7 @@ func catalogReindex(stdout, stderr io.Writer) int {
 	// described a catalogue it was not built from is the one thing this
 	// format exists to prevent.
 	if err := writeNameIndex(np, c, int64(len(b))); err != nil {
-		fmt.Fprintf(stderr, "pkgx: catalog reindex: %v\n", err)
+		fmt.Fprintf(stderr, pfx()+"catalog reindex: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "%d name(s) → %s (what tab-completion reads)\n", len(c.Projects), np)
@@ -134,17 +134,17 @@ func catalogAbsent() bool {
 func catalogUpdate(osn, arch string, stdout, stderr io.Writer) int {
 	c, err := fetchCatalogFor(osn, arch)
 	if err != nil {
-		fmt.Fprintf(stderr, "pkgx: catalog update: %v\n", err)
+		fmt.Fprintf(stderr, pfx()+"catalog update: %v\n", err)
 		return 1
 	}
 	body, err := bottle.MarshalCatalog(c)
 	if err != nil {
-		fmt.Fprintln(stderr, "pkgx: catalog update:", err)
+		fmt.Fprintln(stderr, pfx()+"catalog update:", err)
 		return 1
 	}
 	p := catalogPath(osn, arch)
 	if err := osMkdirAll(filepath.Dir(p), 0o755); err != nil {
-		fmt.Fprintln(stderr, "pkgx: catalog update:", err)
+		fmt.Fprintln(stderr, pfx()+"catalog update:", err)
 		return 1
 	}
 	// Written whole, then renamed. A reader that caught this half-written
@@ -153,11 +153,11 @@ func catalogUpdate(osn, arch string, stdout, stderr io.Writer) int {
 	// silently.
 	tmp := p + ".new"
 	if err := osWriteFile(tmp, body, 0o644); err != nil {
-		fmt.Fprintln(stderr, "pkgx: catalog update:", err)
+		fmt.Fprintln(stderr, pfx()+"catalog update:", err)
 		return 1
 	}
 	if err := osRename(tmp, p); err != nil {
-		fmt.Fprintln(stderr, "pkgx: catalog update:", err)
+		fmt.Fprintln(stderr, pfx()+"catalog update:", err)
 		return 1
 	}
 	// The completion path's index, written AFTER the catalogue it describes
@@ -171,7 +171,7 @@ func catalogUpdate(osn, arch string, stdout, stderr io.Writer) int {
 	// file into a reason the catalogue does not refresh.
 	np := catalogNamesPath(osn, arch)
 	if err := writeNameIndex(np, c, int64(len(body))); err != nil {
-		fmt.Fprintf(stderr, "pkgx: catalog update: name index: %v (completion will read the catalogue instead)\n", err)
+		fmt.Fprintf(stderr, pfx()+"catalog update: name index: %v (completion will read the catalogue instead)\n", err)
 		fmt.Fprintf(stdout, "%d project(s) → %s\n", len(c.Projects), p)
 		return 0
 	}
@@ -191,12 +191,12 @@ func catalogStatus(stdout, stderr io.Writer) int {
 		// ships one has to know the path to drop the file at, and
 		// reading it out of this program beats restating it by hand.
 		fmt.Fprintf(stdout, "%s\n", p)
-		fmt.Fprintf(stdout, "no catalogue for %s/%s — run: pkgx catalog update\n", osn, arch)
+		fmt.Fprintf(stdout, "no catalogue for %s/%s — run: %s catalog update\n", osn, arch, tool)
 		return 0
 	}
 	c, err := bottle.UnmarshalCatalog(b)
 	if err != nil {
-		fmt.Fprintf(stderr, "pkgx: %s is not a catalogue: %v\n", p, err)
+		fmt.Fprintf(stderr, pfx()+"%s is not a catalogue: %v\n", p, err)
 		return 1
 	}
 	withDeps := 0

@@ -51,7 +51,7 @@ var browseKeys = []struct{ key, does string }{
 // runBrowse is the command.
 func runBrowse(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) > 1 {
-		fmt.Fprintln(stderr, "pkgx: usage: pkgx browse [node]")
+		fmt.Fprintln(stderr, pfx()+"usage: "+tool+" browse [node]")
 		return 2
 	}
 	at := ""
@@ -60,11 +60,11 @@ func runBrowse(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, "pkgx: PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	if len(cat.Projects) == 0 {
-		fmt.Fprintln(stderr, "pkgx: nothing to browse — run: pkgx catalog update")
+		fmt.Fprintln(stderr, pfx()+"nothing to browse — run: "+tool+" catalog update")
 		return 1
 	}
 
@@ -73,7 +73,7 @@ func runBrowse(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// neither of them passed a flag.
 	f, ok := stdin.(*os.File)
 	if !ok || !termIsTerminal(int(f.Fd())) {
-		fmt.Fprintf(stderr, "pkgx: not a terminal — printing %s\n", nodeLabel(at))
+		fmt.Fprintf(stderr, pfx()+"not a terminal — printing %s\n", nodeLabel(at))
 		return runLs(argsFor(at), stdout, stderr)
 	}
 	return browseLoop(&browser{cat: cat, src: src, at: at}, f, stdout, stderr)

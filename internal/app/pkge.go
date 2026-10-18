@@ -121,14 +121,20 @@ func shellQuote(s string) string {
 }
 
 // shellInit is the front-end itself: a shell function, printed for
-// `eval "$(pkgx env init)"` in a profile. It is deliberately thin — every
-// decision is made by pkgx, which can be tested; the function only evaluates
-// what pkgx prints.
+// `eval "$(pkgs env init)"` in a profile. It is deliberately thin — every
+// decision is made by the Go code, which can be tested; the function only
+// evaluates what that prints.
+//
+// ⛔ IT CALLS `pkgs env`, NOT `pkgx env`. The verb moved when `pkgs` was
+// split out, and this text is the one place where the binary's name is
+// baked into something a user keeps — a profile sourced for months. A
+// function left calling `pkgx env load` would fail with pkgx's "no such
+// package: env" long after anyone remembered why.
 const shellInit = `pkge() {
   _pkge_cmd="${1-}"; [ $# -gt 0 ] && shift
   case "$_pkge_cmd" in
     load|unload|purge)
-      _pkge_out=$(command pkgx env "$_pkge_cmd" "$@") || return $?
+      _pkge_out=$(command pkgs env "$_pkge_cmd" "$@") || return $?
       eval "$_pkge_out" ;;
     list)
       # shellcheck disable=SC2086
@@ -174,10 +180,10 @@ else
       unload|rm|del)   pkge unload "$@" ;;
       purge)           pkge purge ;;
       list)            pkge list ;;
-      avail|av)        command pkgx env avail ;;
+      avail|av)        command pkgs env avail ;;
       show|display|whatis)
                        [ -n "${1-}" ] || { echo "module show <environment>" >&2; return 2; }
-                       command pkgx env show "$1" ;;
+                       command pkgs env show "$1" ;;
       save)            pkge save "$@" ;;
       restore)         pkge restore "$@" ;;
       swap|switch)

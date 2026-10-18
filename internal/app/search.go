@@ -36,27 +36,27 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	}
 	query := strings.Join(fs.Args(), " ")
 	if strings.TrimSpace(query) == "" {
-		fmt.Fprintln(stderr, "pkgx: usage: pkgx search [-n N] <text>")
+		fmt.Fprintln(stderr, pfx()+"usage: "+tool+" search [-n N] <text>")
 		return 2
 	}
 
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, "pkgx: PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	hits := cat.Search(query)
 	if len(hits) == 0 {
 		// Said on STDERR and exiting 1, so `pkgx search x || echo none`
 		// works and a shell pipeline is not fed a reassuring silence.
-		fmt.Fprintf(stderr, "pkgx: nothing matches %q in %s\n", query, src)
+		fmt.Fprintf(stderr, pfx()+"nothing matches %q in %s\n", query, src)
 		if !knowsCommands(cat) {
 			// The difference between "no such package" and "this
 			// catalogue cannot answer that kind of question". A
 			// catalogue published before commands were carried matches
 			// names only, and a reader deserves to know which of the two
 			// they are looking at.
-			fmt.Fprintln(stderr, "pkgx: this catalogue carries no command names — only project names were searched")
+			fmt.Fprintln(stderr, pfx()+"this catalogue carries no command names — only project names were searched")
 		}
 		return 1
 	}
@@ -69,7 +69,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%-40s %s\n", h.Project, searchNote(cat, h))
 	}
 	if len(shown) < len(hits) {
-		fmt.Fprintf(stderr, "pkgx: %d more; pkgx search -n 0 %s\n", len(hits)-len(shown), query)
+		fmt.Fprintf(stderr, "%s%d more; %s search -n 0 %s\n", pfx(), len(hits)-len(shown), tool, query)
 	}
 	return 0
 }
