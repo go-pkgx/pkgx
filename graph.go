@@ -20,8 +20,17 @@ import (
 // network, and the rendering is the part worth testing.
 var graphFor = bottle.GraphFor
 
-func printGraph(roots map[string]string, stdout io.Writer) error {
-	osn, arch := bottle.HostSlug()
+// ⛔ THE PLATFORM IS A PARAMETER. bottle.GraphFor always took one; only this
+// function pinned it to the host, and that single line made the question
+// "what would a linux machine resolve for this set?" unanswerable from a mac
+// — the same defect, in the same shape, as go-pkgx/pkgx#106 found in
+// `catalog update`.
+//
+// It is not cosmetic. A recipe asking for `go.dev ^1.27.1` resolves to 1.27.1
+// here and to nothing at all on linux/x86-64, whose newest published go.dev
+// is 1.26.5. Before this, `--graph` answered 1.27.1 to both questions, with
+// no sign that it had been asked about a platform it did not consult.
+func printGraph(roots map[string]string, osn, arch string, stdout io.Writer) error {
 	g, err := graphFor(roots, osn, arch)
 	if err != nil {
 		return err

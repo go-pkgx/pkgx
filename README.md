@@ -139,6 +139,45 @@ answers the same question by resolving against the registry, which is the
 better answer when you have one and no answer at all in a scratch image
 that has not fetched anything yet.
 
+### ⛔ `--graph --platform`, because the answer is not the same everywhere
+
+`--graph` used to resolve for the host and only the host. `bottle.GraphFor`
+always took an os and an arch; one line in `printGraph` pinned them — the
+same defect, in the same shape, that `catalog update` had before #106.
+
+It is not cosmetic. A recipe asking for `go.dev ^1.27.1` resolves here and
+does not resolve on linux at all, and nothing said so:
+
+```console
+$ pkgx --graph +go.dev@^1.27.1
+go.dev 1.27.1
+└─ openssl.org 3.6.4
+   └─ curl.se/ca-certs 2026.09.25
+
+$ pkgx --graph --platform linux/x86-64 +go.dev@^1.27.1
+pkgx: no version of go.dev satisfies "^1.27.1" AND is published for
+linux/x86-64 (available: 1.27.1 1.26.8 1.26.5 … (11 in all);
+satisfy but not published here: 1.27.1); asked for by ^1.27.1 (requested)
+```
+
+**"Satisfy but not published here"** is the whole answer a recipe author
+needs, and before this the only way to get it was to own the machine.
+Measured 2026-10-18 while checking whether go-pkgx/packages#323 could land:
+it could not, and the host's confident `1.27.1` said the opposite.
+
+The flag is **refused** on `--json`, `--modulefile` and the default shell
+output rather than ignored there. Those compose a real environment on this
+machine — real paths on `PATH`, a real loader — so a foreign platform cannot
+change what they print, and a flag that is silently without effect is worse
+than one that does not exist.
+
+⛔ `PKGX_CATALOG` does **not** redirect `--graph`, and that is why the flag
+was needed rather than the variable: `ls`, `search` and `why` read that file
+and refuse it loudly when it cannot be read, while `--graph` resolves against
+the registry and never consults it. Pointing `PKGX_CATALOG` at another
+platform's catalogue and asking `--graph` returns the host's answer, with
+exit 0 — which is how this was found.
+
 ### The other direction
 
 Everything above descends, which answers *what does this need* — the question
