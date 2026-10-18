@@ -85,6 +85,12 @@ usage:
                                      command that asks the registry what
                                      exists; ls and <TAB> then read the file,
                                      so they are instant and work offline
+  pkgx catalog update --platform os/arch
+                                     the same, for a platform you are not on:
+                                     linux/x86-64 from a mac, to ask what a
+                                     machine you do not have would get. Writes
+                                     to that platform's own file, so ls and
+                                     <TAB> still read the host's
   pkgx catalog reindex               rebuild the name index <TAB> reads from
                                      the catalogue already on disk, with NO
                                      network — for an image that ships one
