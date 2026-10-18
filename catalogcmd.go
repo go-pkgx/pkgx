@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-pkgx/bottle"
@@ -38,11 +39,19 @@ func runCatalogCmd(args []string, stdout, stderr io.Writer) int {
 	case len(args) == 0:
 		return catalogStatus(stdout, stderr)
 	case len(args) == 1 && args[0] == "update":
-		return catalogUpdate(stdout, stderr)
+		osn, arch := bottle.HostSlug()
+		return catalogUpdate(osn, arch, stdout, stderr)
+	case len(args) == 3 && args[0] == "update" && args[1] == "--platform":
+		osn, arch, ok := strings.Cut(args[2], "/")
+		if !ok || osn == "" || arch == "" {
+			fmt.Fprintf(stderr, "pkgx: catalog update --platform: %q is not os/arch\n", args[2])
+			return 2
+		}
+		return catalogUpdate(osn, arch, stdout, stderr)
 	case len(args) == 1 && args[0] == "reindex":
 		return catalogReindex(stdout, stderr)
 	}
-	fmt.Fprintln(stderr, "pkgx: usage: pkgx catalog [update|reindex]")
+	fmt.Fprintln(stderr, "pkgx: usage: pkgx catalog [update [--platform os/arch]|reindex]")
 	return 2
 }
 
@@ -108,8 +117,21 @@ func catalogAbsent() bool {
 	return err != nil
 }
 
-func catalogUpdate(stdout, stderr io.Writer) int {
-	osn, arch := bottle.HostSlug()
+// catalogUpdate fetches one platform's catalogue and writes it where the
+// reader for that platform looks.
+//
+// ⛔ THE PLATFORM IS A PARAMETER because a question about another one cannot
+// otherwise be asked at all. `fetchCatalogFor` always took os and arch; only
+// this command pinned them to the host, and that single line was enough to
+// make two measurements impossible from this machine: whether a darwin/x86-64
+// bottle starts (go-pkgx/packages#330) and what `bk vulnfetch -catalog` would
+// report for linux before a CI job is wired to run it. An answer that needs a
+// second machine is an answer nobody checks.
+//
+// It writes to that platform's own path, so a foreign catalogue cannot be
+// mistaken for the host's: `pkgx ls` reads catalog/<host>.json and will not
+// see it.
+func catalogUpdate(osn, arch string, stdout, stderr io.Writer) int {
 	c, err := fetchCatalogFor(osn, arch)
 	if err != nil {
 		fmt.Fprintf(stderr, "pkgx: catalog update: %v\n", err)

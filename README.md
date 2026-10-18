@@ -496,6 +496,34 @@ Versions, yes; projects, no. So the registry carries a **catalogue**, which
 is an ordinary bottle — signed, attested and cached like any other, fetched
 in one pull, per platform because what is available differs by architecture.
 
+### `--platform`, for a question about a machine you do not have
+
+```console
+$ pkgx catalog update --platform linux/x86-64
+1915 project(s) → …/catalog/linux-x86-64.json
+```
+
+It writes to **that platform's** path, so a foreign catalogue cannot be
+mistaken for the host's: `pkgx ls` reads `catalog/<host>.json` and will not
+see it.
+
+`fetchCatalogFor` always took an os and an arch; only this command pinned
+them to the host, and that one line made two measurements impossible from a
+darwin machine — whether a darwin/x86-64 bottle starts, and what
+`bk vulnfetch -catalog` would report for linux before a CI job is wired to
+run it. Both had been written down twice as *"unmeasured, needs another
+machine"*, which is a note nobody acts on.
+
+With it, from the same laptop:
+
+```console
+$ bk vulnfetch -dir pantry -catalog catalog/linux-x86-64.json
+133 of them asked AT the version the catalogue publishes; the rest as a whole package
+448 identity(ies) NOT asked: … publishes no version of them for this platform
+133 identity(ies) asked, 1090 not answerable by OSV (repository- or CPE-keyed)
+0 finding(s) across 0 project(s)
+```
+
 ### One command fetches it; nothing else does
 
 `pkgx catalog update` is **the only** thing that asks the registry what
