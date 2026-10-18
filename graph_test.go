@@ -119,7 +119,7 @@ func TestPrintGraph(t *testing.T) {
 	graphFor = func(map[string]string, string, string) (*bottle.Graph, error) { return fixture(), nil }
 
 	var b bytes.Buffer
-	if err := printGraph(map[string]string{"app.org/main": "*"}, &b); err != nil {
+	if err := printGraph(map[string]string{"app.org/main": "*"}, "linux", "x86-64", &b); err != nil {
 		t.Fatal(err)
 	}
 	out := b.String()
@@ -137,7 +137,7 @@ func TestPrintGraphPropagatesTheRefusal(t *testing.T) {
 		return nil, errors.New("no version of unicode.org satisfies \"^71\" AND \"^73\"")
 	}
 	var b bytes.Buffer
-	err := printGraph(map[string]string{"qt.io": "*"}, &b)
+	err := printGraph(map[string]string{"qt.io": "*"}, "linux", "x86-64", &b)
 	if err == nil {
 		t.Fatal("an unsatisfiable closure rendered a graph")
 	}
@@ -186,5 +186,101 @@ func TestVersionLabelNamesBothABILines(t *testing.T) {
 	// overwhelming majority of rows.
 	if got := versionLabel(g, "zlib.net"); got != "1.3.2" {
 		t.Errorf("label = %q, want a bare version", got)
+	}
+}
+
+// --- `--graph --platform`: the question about a machine you do not have ---
+
+// ⛔ THE PLATFORM REACHES THE RESOLVER. Asserting only that the flag parses
+// would pass just as well against the old code, which took the host's and
+// threw the answer away — the defect was never in the parsing.
+func TestPrintGraphResolvesForThePlatformItWasGiven(t *testing.T) {
+	old := graphFor
+	defer func() { graphFor = old }()
+	var gotOS, gotArch string
+	graphFor = func(_ map[string]string, osn, arch string) (*bottle.Graph, error) {
+		gotOS, gotArch = osn, arch
+		return fixture(), nil
+	}
+	var b bytes.Buffer
+	if err := printGraph(map[string]string{"app.org/main": "*"}, "linux", "s390x", &b); err != nil {
+		t.Fatal(err)
+	}
+	if gotOS != "linux" || gotArch != "s390x" {
+		t.Errorf("resolved for %s/%s, want linux/s390x", gotOS, gotArch)
+	}
+}
+
+func TestSplitPlatform(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		format   outputFormat
+		argv     []string
+		os, arch string
+		rest     []string
+		wantErr  string
+	}{
+		{
+			name:   "absent leaves the host to the caller",
+			format: formatGraph,
+			argv:   []string{"+go.dev"},
+			rest:   []string{"+go.dev"},
+		},
+		{
+			name:   "taken off the front",
+			format: formatGraph,
+			argv:   []string{"--platform", "linux/x86-64", "+go.dev"},
+			os:     "linux", arch: "x86-64",
+			rest: []string{"+go.dev"},
+		},
+		{
+			// Every other format composes an environment for THIS machine, so
+			// the flag could only be decoration — and a flag without effect is
+			// worse than one that is absent.
+			name:    "refused on a format that builds something",
+			format:  formatJSON,
+			argv:    []string{"--platform", "linux/x86-64", "+go.dev"},
+			wantErr: "only means something with --graph",
+		},
+		{
+			name:    "a value that is not os/arch",
+			format:  formatGraph,
+			argv:    []string{"--platform", "linux", "+go.dev"},
+			wantErr: "is not os/arch",
+		},
+		{
+			name:    "an empty half is not a platform",
+			format:  formatGraph,
+			argv:    []string{"--platform", "/x86-64", "+go.dev"},
+			wantErr: "is not os/arch",
+		},
+		{
+			name:    "nothing after the flag",
+			format:  formatGraph,
+			argv:    []string{"--platform"},
+			wantErr: "wants an os/arch",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			osn, arch, rest, err := splitPlatform(c.format, c.argv)
+			if c.wantErr != "" {
+				if err == nil {
+					t.Fatalf("accepted %v", c.argv)
+				}
+				if !strings.Contains(err.Error(), c.wantErr) {
+					t.Errorf("error %q does not mention %q", err, c.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if osn != c.os || arch != c.arch {
+				t.Errorf("platform = %q/%q, want %q/%q", osn, arch, c.os, c.arch)
+			}
+			if strings.Join(rest, " ") != strings.Join(c.rest, " ") {
+				t.Errorf("rest = %v, want %v", rest, c.rest)
+			}
+		})
 	}
 }

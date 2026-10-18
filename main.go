@@ -52,6 +52,12 @@ usage:
   pkgx --graph +<pkg>...             the resolved dependency graph: every
                                      version, and which demand decided it.
                                      Resolves only — nothing is downloaded
+  pkgx --graph --platform os/arch +<pkg>...
+                                     the same, for a platform you are not on:
+                                     what a linux machine would resolve, asked
+                                     from a mac. A version that exists but has
+                                     no bottle THERE is named as such, which
+                                     is the answer a recipe author needs
   pkgx compat +<pin>... -- <pkg>...  how much of a package set resolves under
                                      those base versions, and what each refusal
                                      blames. Projects on stdin when none given
@@ -271,6 +277,15 @@ func run(argv []string) int {
 		return 2
 	}
 	format, argv := splitFormat(argv)
+	// `--platform` AFTER the format split, because it is only meaningful for
+	// the one format that merely resolves. Every other format builds a real
+	// environment on this machine, and there is nothing honest to do with a
+	// foreign platform's closure there.
+	graphOS, graphArch, argv, err := splitPlatform(format, argv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pkgx:", err)
+		return 2
+	}
 	plus, rest := splitPlus(argv)
 	if lockPath != "" {
 		if len(plus) > 0 {
@@ -322,7 +337,7 @@ func run(argv []string) int {
 	if describing {
 		out = &held
 	}
-	if err := exec(plus, rest, format, out); err != nil {
+	if err := exec(plus, rest, format, graphOS, graphArch, out); err != nil {
 		fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
 		// Only the shell rendering gets `false`: --json and --modulefile are
 		// data, and a shell keyword in them would be a different kind of lie.
@@ -365,6 +380,36 @@ func splitFormat(argv []string) (outputFormat, []string) {
 	return formatShell, argv
 }
 
+// splitPlatform pulls a leading `--platform os/arch` off the argument list,
+// for the one format that only resolves.
+//
+// ⛔ IT REFUSES THE FLAG ON ANY OTHER FORMAT rather than ignoring it. Every
+// other rendering composes an environment for THIS machine — it puts real
+// paths on PATH and a real loader in place — so a foreign platform cannot
+// change the answer, and a flag that is silently without effect is worse
+// than one that is absent: `pkgx --json --platform linux/x86-64 +go.dev`
+// would print the host's environment and look like it had honoured the
+// request.
+//
+// An empty os or arch is returned when the flag is absent, and the caller
+// falls back to the host.
+func splitPlatform(format outputFormat, argv []string) (osn, arch string, rest []string, err error) {
+	if len(argv) == 0 || argv[0] != "--platform" {
+		return "", "", argv, nil
+	}
+	if format != formatGraph {
+		return "", "", argv, fmt.Errorf("--platform asks about a platform you are not on, so it only means something with --graph, which resolves and stops")
+	}
+	if len(argv) < 2 {
+		return "", "", argv, fmt.Errorf("--platform wants an os/arch, e.g. --platform linux/x86-64")
+	}
+	osn, arch, ok := strings.Cut(argv[1], "/")
+	if !ok || osn == "" || arch == "" {
+		return "", "", argv, fmt.Errorf("--platform: %q is not os/arch", argv[1])
+	}
+	return osn, arch, argv[2:], nil
+}
+
 // splitPlus separates leading "+pkg" tokens from the remainder. A lone "--"
 // ends the package list and is dropped; everything after it is the command.
 // Without any "+pkg", the first remainder token is itself the package to run.
@@ -393,7 +438,11 @@ func splitPlus(argv []string) (plus, rest []string) {
 //     primary program (its declared bin matching the project leaf).
 //   - `pkgx +a +b [cmd...]`  -> materialise a and b; run cmd resolved from
 //     their bin dirs (or, with no cmd, the primary program of the last +pkg).
-func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
+//
+// graphOS and graphArch are the platform `--graph` resolves for. Empty means
+// the host, and they are ignored by every other format — splitPlatform
+// refuses the flag there rather than letting it pass without effect.
+func exec(plus, rest []string, format outputFormat, graphOS, graphArch string, stdout io.Writer) error {
 	dir := bottle.Dir()
 
 	// The set of packages to materialise, and the program to run.
@@ -443,7 +492,10 @@ func exec(plus, rest []string, format outputFormat, stdout io.Writer) error {
 	// this set WOULD be, which is worth asking before committing a disk to it,
 	// and worth asking about a closure that will not resolve at all.
 	if format == formatGraph {
-		return printGraph(roots, stdout)
+		if graphOS == "" {
+			graphOS, graphArch = bottle.HostSlug()
+		}
+		return printGraph(roots, graphOS, graphArch, stdout)
 	}
 
 	closure, err := bottle.CompleteClosure(roots, dir)
