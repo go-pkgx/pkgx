@@ -172,11 +172,27 @@ change what they print, and a flag that is silently without effect is worse
 than one that does not exist.
 
 ⛔ `PKGX_CATALOG` does **not** redirect `--graph`, and that is why the flag
-was needed rather than the variable: `ls`, `search` and `why` read that file
-and refuse it loudly when it cannot be read, while `--graph` resolves against
-the registry and never consults it. Pointing `PKGX_CATALOG` at another
-platform's catalogue and asking `--graph` returns the host's answer, with
-exit 0 — which is how this was found.
+was needed rather than the variable: `ls`, `search` and `why` read that file,
+while `--graph` resolves against the registry and never opens it.
+
+It used to say so by saying nothing. Pointing `PKGX_CATALOG` at another
+platform's catalogue and asking `--graph` returned the **host's** answer with
+exit 0, which is how this was found — and nearly how go-pkgx/packages#323 was
+read as unblocked when it is not. It now refuses:
+
+```console
+$ PKGX_CATALOG=/nope/absent.json pkgx --graph +go.dev
+pkgx: PKGX_CATALOG names /nope/absent.json, and --graph does not read a
+catalogue — it resolves against the registry. To ask about another platform:
+--graph --platform os/arch
+```
+
+A refusal rather than a warning, because a warning on stderr is missed in
+exactly the place this matters — a script reading the tree. And a refusal
+rather than resolving *from* the catalogue, because the two answer different
+questions: a catalogue records what is **published**, while this resolves
+what **would satisfy** a constraint, including versions no bottle carries.
+The error message above depends on being able to tell those apart.
 
 ### The other direction
 
