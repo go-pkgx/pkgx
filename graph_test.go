@@ -284,3 +284,64 @@ func TestSplitPlatform(t *testing.T) {
 		})
 	}
 }
+
+// ⛔ PKGX_CATALOG is refused by --graph, not ignored. `ls`, `search` and
+// `why` read that file and refuse it loudly when it cannot be read; --graph
+// resolves against the registry and never opens it, so before go-pkgx/pkgx#110
+// it answered for the HOST with exit 0 whatever the variable named.
+func TestGraphRefusesPkgxCatalog(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		format  outputFormat
+		catalog string
+		wantErr string
+	}{
+		{
+			name:    "--graph with a catalogue named",
+			format:  formatGraph,
+			catalog: "/some/linux-x86-64.json",
+			wantErr: "--graph does not read a catalogue",
+		},
+		{
+			// The message has to name the way to ask what they meant, or the
+			// refusal is a dead end.
+			name:    "and it names --platform",
+			format:  formatGraph,
+			catalog: "/some/linux-x86-64.json",
+			wantErr: "--graph --platform os/arch",
+		},
+		{
+			// The control: without the variable there is nothing to refuse,
+			// and --graph is the whole point of the flag that replaced it.
+			name:   "--graph with no catalogue named",
+			format: formatGraph,
+		},
+		{
+			// Every other format DOES read the catalogue, through the paths
+			// that already refuse an unreadable one. Refusing here would
+			// break the air-gapped case the variable exists for.
+			name:    "another format with a catalogue named",
+			format:  formatShell,
+			catalog: "/some/linux-x86-64.json",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			err := graphCatalogClash(c.format, c.catalog)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("refused: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("accepted")
+			}
+			if !strings.Contains(err.Error(), c.wantErr) {
+				t.Errorf("error %q does not mention %q", err, c.wantErr)
+			}
+			if !strings.Contains(err.Error(), c.catalog) {
+				t.Errorf("error %q does not name the file", err)
+			}
+		})
+	}
+}

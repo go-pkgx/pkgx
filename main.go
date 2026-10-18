@@ -282,6 +282,9 @@ func run(argv []string) int {
 	// environment on this machine, and there is nothing honest to do with a
 	// foreign platform's closure there.
 	graphOS, graphArch, argv, err := splitPlatform(format, argv)
+	if err == nil {
+		err = graphCatalogClash(format, os.Getenv("PKGX_CATALOG"))
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "pkgx:", err)
 		return 2
@@ -408,6 +411,35 @@ func splitPlatform(format outputFormat, argv []string) (osn, arch string, rest [
 		return "", "", argv, fmt.Errorf("--platform: %q is not os/arch", argv[1])
 	}
 	return osn, arch, argv[2:], nil
+}
+
+// graphCatalogClash refuses `--graph` while PKGX_CATALOG names a file.
+//
+// ⛔ THE VARIABLE HAS NOTHING TO REDIRECT HERE, AND THE SILENCE WAS THE
+// DEFECT. `ls`, `search` and `why` read that file and refuse it loudly when
+// it cannot be read — the variable's own documentation says "named and
+// unreadable is an error, not a quiet fallback". `--graph` resolves against
+// the REGISTRY and never opens it, so before this:
+//
+//	PKGX_CATALOG=/nope/absent.json pkgx ls go.dev        exit 1, names the file
+//	PKGX_CATALOG=/nope/absent.json pkgx --graph +go.dev  exit 0, host's answer
+//
+// Setting it to another platform's catalogue and asking `--graph` returned
+// this machine's resolution, confidently, with nothing to distinguish the two
+// answers. That is how go-pkgx/packages#323 was nearly read as unblocked when
+// it is not. See go-pkgx/pkgx#110.
+//
+// A refusal rather than a warning, because a warning on stderr is missed in
+// exactly the place this matters — a script that reads the tree. And a
+// refusal rather than resolving FROM the catalogue, because the two answer
+// different questions: a catalogue records what is PUBLISHED, while this
+// resolves what WOULD satisfy a constraint, including versions no bottle
+// carries. `--platform` keeps both, which is why it is what the message names.
+func graphCatalogClash(format outputFormat, catalog string) error {
+	if format != formatGraph || catalog == "" {
+		return nil
+	}
+	return fmt.Errorf("PKGX_CATALOG names %s, and --graph does not read a catalogue — it resolves against the registry. To ask about another platform: --graph --platform os/arch", catalog)
 }
 
 // splitPlus separates leading "+pkg" tokens from the remainder. A lone "--"
