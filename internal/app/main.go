@@ -214,6 +214,13 @@ func run(argv []string) int {
 	// as upstream does, and the nine verbs moved to `pkgs` (see pkgs.go).
 	// A word that is one of theirs AND is not a package gets told where it
 	// went, once, instead of failing with "no such package".
+	// ⛔ BEFORE unknownVerb, because unknownVerb deliberately stays silent
+	// for a word a package provides — and `env` is provided by
+	// gnu.org/coreutils, which is exactly why a stale pkge profile gets
+	// coreutils' error instead of a pointer. See staleEnvCall.
+	if code, said := staleEnvCall(argv, os.Stderr); said {
+		return code
+	}
 	if code, said := unknownVerb(argv[0], os.Stderr); said {
 		return code
 	}

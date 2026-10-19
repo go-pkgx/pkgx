@@ -114,6 +114,51 @@ func queryOne(cat bottle.Catalog, cmd string, stdout, stderr io.Writer) int {
 //
 // A catalogue that cannot be read is a silence, not a guess: the resolver
 // one line later gives the better error.
+// pkgeSubcommands are the words the generated pkge shell function passes to
+// `env`. They are the whole reason staleEnvCall exists; see it.
+var pkgeSubcommands = []string{"init", "load", "unload", "purge", "avail", "show", "import"}
+
+// staleEnvCall answers `pkgx env <pkge subcommand>`, and reports whether it
+// said anything.
+//
+// ⛔ ONE WORD WIDE, AND IT IS THE ONE THAT BITES. Of the nine verbs that
+// moved to pkgs, `env` is the only one that is BOTH provided by a package —
+// gnu.org/coreutils — AND baked into something users already have: the pkge
+// shell function, which a profile sources and which runs
+//
+//	command pkgx env "$_pkge_cmd" "$@"
+//
+// Every other moved word reaches unknownVerb and is told where it went.
+// `env` does not: a package provides it, so pkgx correctly runs GNU env, and
+// a profile written last month answers `pkge load foo` with
+//
+//	env: 'load': No such file or directory      (exit 127)
+//
+// which names neither pkgx nor pkgs and looks like the user's fault. That is
+// the same shape as the `pkgx ls` → `[` defect the split already uncovered:
+// a plausible error from the wrong program.
+//
+// ⛔ IT REFUSES; IT DOES NOT DO THE WORK. This is a transition note, not a
+// verb coming back — pkgx never reads an environment again. The cost is that
+// `pkgx env show` can no longer mean "run GNU env, then a program called
+// show"; the message says exactly what happened, and `env` with any other
+// argument still runs coreutils as it should.
+func staleEnvCall(argv []string, stderr io.Writer) (int, bool) {
+	if len(argv) < 2 || argv[0] != "env" {
+		return 0, false
+	}
+	for _, s := range pkgeSubcommands {
+		if argv[1] != s {
+			continue
+		}
+		fmt.Fprintf(stderr, "%senv %s is pkgs's: pkgs env %s\n", pfx(), argv[1], argv[1])
+		fmt.Fprintf(stderr, "%sif a profile is still calling this, its pkge function is from before the split — re-run: eval \"$(pkgs env init)\"\n", pfx())
+		fmt.Fprintf(stderr, "%s(to run gnu.org/coreutils' env instead, give it something that is not a pkge subcommand)\n", pfx())
+		return 2, true
+	}
+	return 0, false
+}
+
 func unknownVerb(word string, stderr io.Writer) (int, bool) {
 	if !isVerb(word) {
 		return 0, false
