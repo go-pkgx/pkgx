@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -347,4 +348,104 @@ func TestTheReleaseStampsThisPackagesVersion(t *testing.T) {
 			t.Errorf("release.yml does not look like it builds both binaries: %q is absent", pkg)
 		}
 	}
+}
+
+// ⛔ A STALE pkge PROFILE GETS A POINTER, NOT GNU env's ERROR.
+//
+// Measured against the real binaries after the split: `pkgx env load foo`
+// printed
+//
+//	env: 'load': No such file or directory      (exit 127)
+//
+// because gnu.org/coreutils provides `env`, so pkgx ran it — correctly, by
+// the grammar — and the generated pkge function in every profile written
+// before today calls exactly that. Of the nine moved verbs it is the only
+// one that is both provided by a package and baked into something users
+// already have.
+func TestAStalePkgeProfileIsToldWhereEnvWent(t *testing.T) {
+	for _, sub := range pkgeSubcommands {
+		var errb bytes.Buffer
+		code, said := staleEnvCall([]string{"env", sub, "foo"}, &errb)
+		if !said || code != 2 {
+			t.Fatalf("env %s: said=%v code=%d", sub, said, code)
+		}
+		for _, want := range []string{"pkgs env " + sub, "eval \"$(pkgs env init)\""} {
+			if !strings.Contains(errb.String(), want) {
+				t.Errorf("env %s: %q does not mention %q", sub, errb.String(), want)
+			}
+		}
+	}
+}
+
+// ⛔ AND GNU env STILL RUNS. The note is one word wide on purpose: it must
+// not turn `pkgx env` into a verb again, which is the thing the split
+// removed. Anything that is not a pkge subcommand falls straight through to
+// the package path.
+func TestEnvWithAnythingElseStillReachesCoreutils(t *testing.T) {
+	for _, argv := range [][]string{
+		{"env"},                      // bare: a package to run, not a note
+		{"env", "FOO=1", "printenv"}, // the ordinary use
+		{"env", "-i", "sh"},
+		{"env", "make"},
+	} {
+		var errb bytes.Buffer
+		if _, said := staleEnvCall(argv, &errb); said {
+			t.Errorf("%v was intercepted: %q", argv, errb.String())
+		}
+	}
+	// And it is only `env`: the other eight are unknownVerb's.
+	var errb bytes.Buffer
+	if _, said := staleEnvCall([]string{"ls", "load"}, &errb); said {
+		t.Errorf("ls was intercepted by the env note: %q", errb.String())
+	}
+}
+
+// ⛔ THE WIRING, AND WITHOUT EXEC'ING ANYTHING.
+//
+// A mutation that deleted the call from run() survived the tests above: they
+// cover staleEnvCall and say nothing about whether anything calls it. The
+// obvious end-to-end check — run(["env","load"]) against a real catalogue —
+// is the one thing that must NOT be written, because unwired it reaches the
+// package path and execve's GNU env, replacing the test binary mid-suite.
+// That is not hypothetical; it is how TestEnvVerb failed during the split.
+//
+// So: a catalogue in which NOTHING provides `env`. Both paths then return 2
+// and the TEXT is what separates them — unknownVerb says "is a pkgs
+// command", staleEnvCall says how to repair the profile. Asserting the
+// repair line asserts the wiring.
+func TestTheEnvNoteIsWiredIntoRun(t *testing.T) {
+	withCatalog(t, bottle.Catalog{Projects: []bottle.CatalogProject{
+		{Project: "gnu.org/bash", Provides: []string{"bash"}},
+	}}, nil)
+	code, errb := capturePkgx(t, "env", "load")
+	if code != 2 {
+		t.Fatalf("code = %d, want 2 (%s)", code, errb)
+	}
+	if !strings.Contains(errb, `eval "$(pkgs env init)"`) {
+		t.Errorf("run did not reach the stale-profile note: %q", errb)
+	}
+}
+
+// capturePkgx drives `run` — pkgx's entry point — and returns its exit code
+// and stderr. A sibling of runSurface, which drives Pkgs; the two binaries
+// need two helpers because the whole point is that they answer differently.
+func capturePkgx(t *testing.T, argv ...string) (int, string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+	done := make(chan string, 1)
+	go func() { b, _ := io.ReadAll(r); done <- string(b) }()
+
+	var code int
+	_ = captureStdout(t, func() { code = run(argv) })
+
+	os.Stderr = old
+	_ = w.Close()
+	errb := <-done
+	_ = r.Close()
+	return code, errb
 }

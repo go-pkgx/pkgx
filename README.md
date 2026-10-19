@@ -51,6 +51,26 @@ Both are built from `internal/app`: they share the resolver, the catalogue
 reader and the store walker, because a fork of the resolver is a fork of what
 a version *means*.
 
+### ⛔ If you had `pkge` in your profile, re-run its init
+
+```sh
+eval "$(pkgs env init)"
+```
+
+The generated `pkge` function calls `pkgx env load`, and `env` is the one
+moved verb that a package also provides — `gnu.org/coreutils`. So an old
+profile does not get a pointer, it gets GNU env:
+
+```console
+$ pkgx env load foo
+env: ‘load’: No such file or directory      # exit 127
+```
+
+That is pkgx obeying the grammar, and it names neither binary. `pkgx env`
+followed by a `pkge` subcommand therefore prints a transition note and
+refuses, instead of running coreutils — one word wide, and only for those
+seven words, so `pkgx env FOO=1 printenv` still does what it always did.
+
 Like pkgm it is `CGO_ENABLED=0` with no runtime dependencies of its own: no
 Deno, no curl, no shell — a single ~9 MB binary that materialises each package's
 full dependency closure on demand and execs it.
