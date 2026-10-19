@@ -140,7 +140,10 @@ func TestAnUnknownCommandPointsAtSearch(t *testing.T) {
 	if !strings.Contains(err.Error(), "declares") {
 		t.Errorf("the error overclaims — it should say DECLARES, not provides: %v", err)
 	}
-	if !strings.Contains(err.Error(), "pkgx search nosuchtool") {
+	// `pkgs search`, not `pkgx search`: the verb moved with the split, and a
+	// pointer at a command that no longer exists is worse than none —
+	// whoever follows it gets "no such package: search".
+	if !strings.Contains(err.Error(), "pkgs search nosuchtool") {
 		t.Errorf("the error does not point at the search: %v", err)
 	}
 }
@@ -156,7 +159,7 @@ func TestNoCatalogueSaysToUpdateItRatherThanBlamingThePantry(t *testing.T) {
 	if err == nil {
 		t.Fatal("a bare word with no catalogue resolved")
 	}
-	if !strings.Contains(err.Error(), "pkgx catalog update") {
+	if !strings.Contains(err.Error(), "pkgs catalog update") {
 		t.Errorf("the error does not say how to fix it: %v", err)
 	}
 	if strings.Contains(err.Error(), "no recipe for") {
@@ -170,7 +173,7 @@ func TestNoCatalogueSaysToUpdateItRatherThanBlamingThePantry(t *testing.T) {
 func TestAnEmptyCatalogueIsTreatedAsNone(t *testing.T) {
 	withCatalog(t, bottle.Catalog{Generated: "2026-10-12T09:00:00Z"}, nil)
 	m := &commandMapper{dir: t.TempDir()}
-	if _, _, err := m.resolve("hugo"); err == nil || !strings.Contains(err.Error(), "pkgx catalog update") {
+	if _, _, err := m.resolve("hugo"); err == nil || !strings.Contains(err.Error(), "pkgs catalog update") {
 		t.Errorf("empty catalogue: err = %v", err)
 	}
 }

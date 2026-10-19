@@ -157,13 +157,17 @@ func TestSearchLimitsAndSaysSo(t *testing.T) {
 // nobody can reach or discover is not a subcommand.
 func TestSearchIsReachable(t *testing.T) {
 	withCatalog(t, cmdCatalog(), nil)
+	asPkgs(t)
 	var code int
-	out := captureStdout(t, func() { code = run([]string{"search", "rg"}) })
+	out := captureStdout(t, func() { code = Pkgs([]string{"search", "rg"}) })
 	if code != 0 || !strings.Contains(out, "crates.io/ripgrep") {
-		t.Errorf("pkgx search rg = %d, %q", code, out)
+		t.Errorf("pkgs search rg = %d, %q", code, out)
 	}
-	if !strings.Contains(usage, "pkgx search") {
-		t.Error("usage does not mention search")
+	if !strings.Contains(pkgsUsage, "pkgs search") {
+		t.Error("pkgs usage does not mention search")
+	}
+	if !strings.Contains(usage, "pkgs search") {
+		t.Error("pkgx usage does not point at pkgs search")
 	}
 	found := false
 	for _, c := range completionsFor("sea") {

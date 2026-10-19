@@ -62,7 +62,7 @@ func runStore(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintln(stderr, "pkgx: usage: pkgx store [--by-size] [-n N]")
+		fmt.Fprintln(stderr, pfx()+"usage: "+tool+" store [--by-size] [-n N]")
 		return 2
 	}
 	dir := bottle.Dir()
@@ -73,7 +73,7 @@ func runStore(args []string, stdout, stderr io.Writer) int {
 	for _, p := range roots {
 		l, err := bottle.ReadLock(p)
 		if err != nil {
-			fmt.Fprintf(stderr, "pkgx: --root %s: %v\n", p, err)
+			fmt.Fprintf(stderr, pfx()+"--root %s: %v\n", p, err)
 			return 2
 		}
 		locks = append(locks, l)
@@ -102,7 +102,7 @@ func runStore(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%s\nnothing here yet — a store fills up the first time pkgx runs something\n", dir)
 			return 0
 		}
-		fmt.Fprintf(stderr, "pkgx: %s: %v\n", dir, err)
+		fmt.Fprintf(stderr, pfx()+"%s: %v\n", dir, err)
 		return 2
 	}
 

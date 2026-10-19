@@ -21,8 +21,15 @@ import (
 //
 // So: every advertised subcommand must be REACHABLE, and every reachable
 // one must be ADVERTISED, both ways round.
+//
+// ⛔ THE SURFACE IS `pkgs`'s NOW, and there is a FOURTH list since the
+// split: pkgx's own usage, which names the same verbs to point at the other
+// binary. All four are checked here, because the failure that prompted this
+// comment — a verb in one list and not the others — got a new way to happen
+// the moment there were two programs.
 func TestTheCommandSurfaceAgreesWithItself(t *testing.T) {
 	withCatalog(t, browseCat(), nil)
+	asPkgs(t)
 
 	// What completion offers. The source of truth for "advertised".
 	var offered []string
@@ -43,8 +50,15 @@ func TestTheCommandSurfaceAgreesWithItself(t *testing.T) {
 		// because browse's own help text says `pkgx +$(pkgx browse)` and
 		// the grep matches that mention. Found by mutating the usage and
 		// watching the suite stay green.
-		if !usageListsCommand(name) {
-			t.Errorf("%q is offered at <TAB> but has no line in the usage", name)
+		if !usageListsCommand(pkgsUsage, "pkgs", name) {
+			t.Errorf("%q is offered at <TAB> but has no line in the pkgs usage", name)
+		}
+		// And pkgx NAMES it, on a line of its own, because the verb used to
+		// be pkgx's: a help text that simply stopped mentioning `ls` would
+		// read as "removed" rather than "moved", and the reader would have
+		// no way to find where it went.
+		if !usageListsCommand(usage, "pkgs", name) {
+			t.Errorf("%q is a pkgs verb that pkgx's usage does not point at", name)
 		}
 
 		// ADVERTISED ⇒ REACHABLE. Run it with no arguments and require
@@ -92,7 +106,12 @@ func runSurface(t *testing.T, name string) (int, string, string) {
 	go func() { b, _ := io.ReadAll(r); done <- string(b) }()
 
 	var code int
-	out := captureStdout(t, func() { code = run([]string{name}) })
+	// ⛔ THROUGH Pkgs. Through `run` it would be pkgx, where these words are
+	// package names — and `run(["env"])` execve's the system env, replacing
+	// the test binary mid-suite. That is not a hypothetical: it happened
+	// while this split was being made, and `go test` reported FAIL with no
+	// failing test named.
+	out := captureStdout(t, func() { code = Pkgs([]string{name}) })
 
 	os.Stderr = old
 	_ = w.Close()
@@ -101,13 +120,18 @@ func runSurface(t *testing.T, name string) (int, string, string) {
 	return code, out, errb
 }
 
-// usageListsCommand reports whether the usage has an ENTRY for a command —
-// a line whose first words are `pkgx <name>` — rather than a mention of it
-// somewhere in another entry's prose.
-func usageListsCommand(name string) bool {
-	for _, line := range strings.Split(usage, "\n") {
+// usageListsCommand reports whether a usage text has an ENTRY for a command
+// — a line whose first two words are the binary and the verb — rather than a
+// mention of it somewhere in another entry's prose.
+//
+// The line, not a substring anywhere: `strings.Contains(usage, "pkgs
+// browse")` passes on a usage with no browse entry at all, because browse's
+// own help text says `pkgx +$(pkgs browse)` and the grep matches that
+// mention. Found by mutating the usage and watching the suite stay green.
+func usageListsCommand(text, binary, name string) bool {
+	for _, line := range strings.Split(text, "\n") {
 		f := strings.Fields(line)
-		if len(f) >= 2 && f[0] == "pkgx" && f[1] == name {
+		if len(f) >= 2 && f[0] == binary && f[1] == name {
 			return true
 		}
 	}

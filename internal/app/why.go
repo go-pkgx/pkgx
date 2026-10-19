@@ -30,13 +30,13 @@ import (
 // Saying so is better than implying a scan nobody ran.
 func runWhy(args []string, stdout, stderr io.Writer) int {
 	if len(args) != 2 {
-		fmt.Fprintln(stderr, "pkgx: usage: pkgx why <project> <dependency>")
+		fmt.Fprintln(stderr, pfx()+"usage: "+tool+" why <project> <dependency>")
 		return 2
 	}
 	from, to := args[0], args[1]
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, "pkgx: PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	// BOTH ENDS ARE CHECKED FIRST, and separately, because "no such
@@ -45,9 +45,9 @@ func runWhy(args []string, stdout, stderr io.Writer) int {
 	// dependency that was never spelt right.
 	for _, p := range []string{from, to} {
 		if _, ok := cat.Lookup(p); !ok {
-			fmt.Fprintf(stderr, "pkgx: %s is not in this catalogue (%s)\n", p, cat.Age(time.Now()))
+			fmt.Fprintf(stderr, pfx()+"%s is not in this catalogue (%s)\n", p, cat.Age(time.Now()))
 			if catalogAbsent() {
-				fmt.Fprintln(stderr, "pkgx: there is no catalogue here; run: pkgx catalog update")
+				fmt.Fprintln(stderr, pfx()+"there is no catalogue here; run: "+tool+" catalog update")
 			}
 			return 1
 		}
@@ -59,7 +59,7 @@ func runWhy(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s does not need %s, directly or through anything else\n", from, to)
 		return 1
 	}
-	fmt.Fprintf(stderr, "pkgx: catalogue %s, %s\n", src, cat.Age(time.Now()))
+	fmt.Fprintf(stderr, pfx()+"catalogue %s, %s\n", src, cat.Age(time.Now()))
 	swept := knowsVersions(cat)
 	for i, p := range path {
 		note := ""

@@ -254,8 +254,15 @@ func TestTheHelpLineMatchesTheBindings(t *testing.T) {
 }
 
 func TestBrowseIsReachable(t *testing.T) {
-	if !strings.Contains(usage, "pkgx browse") {
-		t.Error("usage does not mention browse")
+	asPkgs(t)
+	if !strings.Contains(pkgsUsage, "pkgs browse") {
+		t.Error("pkgs usage does not mention browse")
+	}
+	// pkgx has to name it too: the verb moved, and a help text that simply
+	// stopped mentioning browse would read as "removed" to anyone who used
+	// it yesterday.
+	if !strings.Contains(usage, "pkgs browse") {
+		t.Error("pkgx usage does not point at pkgs browse")
 	}
 	found := false
 	for _, c := range completionsFor("bro") {
@@ -264,7 +271,7 @@ func TestBrowseIsReachable(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("`pkgx bro<TAB>` does not offer browse")
+		t.Error("pkgs bro<TAB> does not offer browse")
 	}
 	if code := runBrowse([]string{"a", "b"}, bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
 		t.Error("two nodes is not a usage error")

@@ -77,22 +77,36 @@ jobs:
           set -eu
           DIST="$RUNNER_TEMP/dist"
           mkdir -p "$DIST"
+          # ⛔ TWO BINARIES SINCE THE SPLIT. `pkgx` runs packages and `pkgs`
+          # answers about them; a release that shipped only pkgx would leave
+          # every reader of `pkgs ls` with nothing to install, and the
+          # install script offers the name.
+          #
+          # The version is stamped into each main's OWN `version` symbol:
+          # they are two packages, and `-X main.version` reaches whichever
+          # one is being built.
           for target in \
             linux/amd64 linux/arm64 \
             darwin/amd64 darwin/arm64 \
             windows/amd64 windows/arm64; do
             os=${target%/*}
             arch=${target#*/}
-            out="pkgx-${os}-${arch}"
-            if [ "$os" = "windows" ]; then
-              out="${out}.exe"
-            fi
-            echo "building $out"
-            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-              go build -trimpath -ldflags="-s -w -X main.version=${TAG#v}" -o "$DIST/${out}" .
+            for tool in pkgx pkgs; do
+              pkg="."
+              if [ "$tool" = "pkgs" ]; then
+                pkg="./cmd/pkgs"
+              fi
+              out="${tool}-${os}-${arch}"
+              if [ "$os" = "windows" ]; then
+                out="${out}.exe"
+              fi
+              echo "building $out"
+              CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+                go build -trimpath -ldflags="-s -w -X main.version=${TAG#v}" -o "$DIST/${out}" "$pkg"
+            done
           done
           cd "$DIST"
-          sha256sum pkgx-* > SHA256SUMS
+          sha256sum pkgx-* pkgs-* > SHA256SUMS
           cat SHA256SUMS
 
       # EVERY binary, not one, and EQUALITY, not "contains the tag".
@@ -106,7 +120,9 @@ jobs:
           DIST="$RUNNER_TEMP/dist"
           want="${TAG#v}"
           bad=0
-          for bin in "$DIST"/pkgx-*; do
+          # Both binaries. A guard that walked only pkgx-* would have
+          # checked half a release and said so with the same green tick.
+          for bin in "$DIST"/pkgx-* "$DIST"/pkgs-*; do
             name=$(basename "$bin")
             info=$(go version -m "$bin")
             mod=$(printf '%s\n' "$info" | awk '$1=="mod" {print $3; exit}')
@@ -134,11 +150,13 @@ jobs:
           done
           # And the version it PRINTS: the ldflags stamp is what users see,
           # and it is set independently of the build info above.
-          got=$("$DIST/pkgx-linux-amd64" --version | awk '{print $2}')
-          if [ "$got" != "$want" ]; then
-            echo "::error::pkgx --version says '$got', want exactly '$want'"
-            bad=1
-          fi
+          for tool in pkgx pkgs; do
+            got=$("$DIST/${tool}-linux-amd64" --version | awk '{print $2}')
+            if [ "$got" != "$want" ]; then
+              echo "::error::$tool --version says '$got', want exactly '$want'"
+              bad=1
+            fi
+          done
           exit "$bad"
 
       - name: Publish GitHub Release
@@ -153,5 +171,5 @@ jobs:
           else
             gh release create "$TAG" "$DIST"/* \
               --title "$TAG" \
-              --notes "Static, dependency-free pkgx binaries (CGO_ENABLED=0) for linux, darwin and windows on amd64 and arm64. Verify downloads against SHA256SUMS. Install THIS release with: curl -fsSL https://go-pkgx.github.io/install.sh | sh -s -- pkgx $TAG"
+              --notes "Static, dependency-free binaries (CGO_ENABLED=0) for linux, darwin and windows on amd64 and arm64. TWO commands: pkgx runs packages, pkgs answers about them (ls, search, why, catalog, store, browse, compat, env, completion). Verify downloads against SHA256SUMS. Install THIS release with: curl -fsSL https://go-pkgx.github.io/install.sh | sh -s -- pkgx $TAG — and the same line with pkgs."
           fi

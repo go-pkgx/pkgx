@@ -52,15 +52,23 @@ func TestCatalogPathComesFromTheBinary(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("no go toolchain in this lane")
 	}
-	bin := filepath.Join(t.TempDir(), "pkgx")
-	build := exec.Command("go", "build", "-o", bin, ".")
-	build.Dir = ".." + string(filepath.Separator) + ".."
-	build.Stderr = os.Stderr
-	if err := build.Run(); err != nil {
-		t.Fatal(err)
+	dir := t.TempDir()
+	root := ".." + string(filepath.Separator) + ".."
+	// ⛔ TWO BINARIES, AND EACH IS ASKED WHAT IT OWNS. `catalog` is pkgs's
+	// verb since the split; asking pkgx for it asks it to RUN a package
+	// called catalog. The completion being measured is still pkgx's.
+	bin := filepath.Join(dir, "pkgx")
+	stager := filepath.Join(dir, "pkgs")
+	for _, b := range []struct{ out, pkg string }{{bin, "."}, {stager, "./cmd/pkgs"}} {
+		build := exec.Command("go", "build", "-o", b.out, b.pkg)
+		build.Dir = root
+		build.Stderr = os.Stderr
+		if err := build.Run(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	store := t.TempDir()
-	got := catalogPath(bin, store)
+	got := catalogPath(stager, store)
 	if !strings.HasPrefix(got, store) {
 		t.Fatalf("catalogPath = %q, not under the store %q", got, store)
 	}

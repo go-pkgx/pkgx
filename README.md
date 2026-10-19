@@ -13,6 +13,44 @@ backend — bottle resolution, download, `FROM scratch` closure completion, and
 loader-aware exec — via the [`github.com/go-pkgx/bottle`](https://github.com/go-pkgx/bottle)
 package, so there is a single source of truth and no duplication.
 
+## ⛔ Two commands: `pkgx` runs, `pkgs` asks
+
+This repository builds **two** binaries, and the split is about grammar
+rather than taste.
+
+Upstream pkgx has no verbs at all: the first argument that is not a flag is a
+**package**, and pkgx runs it. This fork had added nine verbs to that
+position — `ls`, `search`, `why`, `store`, `browse`, `catalog`, `env`,
+`compat`, `completion` — and each one took a name away from the registry. Two
+took names that exist: measured against the published linux/x86-64 catalogue
+on 2026-10-18, **`gnu.org/coreutils` provides both `ls` and `env`**. So `pkgx
+ls` listed a catalogue where upstream runs GNU ls, and there was no way to
+ask for the other one.
+
+```console
+$ pkgx ls --version          # GNU coreutils, as upstream does
+ls (GNU coreutils) 9.11
+$ pkgs ls gnu.org            # what is available under a node
+$ pkgx -Q ls                 # upstream's query mode, which this fork lacked
+gnu.org/coreutils
+```
+
+**A reserved word could not fix it.** The obvious repair is one word to hang
+the verbs off — `pkgx pkg ls`. It fails the same way: `vercel.com/pkg`
+provides the command `pkg`, and any bare word can become a package tomorrow,
+because the whole point of the first position is that the registry decides
+what is in it. Only a token the grammar already reserves is safe: a flag
+(upstream's own choice for `-Q`) or a different binary.
+
+`pkgs` reads as a subject followed by a verb — `pkgs search json`, `pkgs why
+curl.se openssl.org`. Nothing in either published catalogue provides a
+command by that name, while `pkgctl` is a real binary in Arch's devtools and
+`pkgtool` one in Slackware.
+
+Both are built from `internal/app`: they share the resolver, the catalogue
+reader and the store walker, because a fork of the resolver is a fork of what
+a version *means*.
+
 Like pkgm it is `CGO_ENABLED=0` with no runtime dependencies of its own: no
 Deno, no curl, no shell — a single ~9 MB binary that materialises each package's
 full dependency closure on demand and execs it.
@@ -60,11 +98,26 @@ pkgx +<pkg> [+<pkg>...] [cmd ...]  bring packages into the environment and run
                                    e.g. pkgx +git +gnu.org/bash -- ./build.sh
 pkgx --json +<pkg>...              the composed environment as data
 pkgx --modulefile +<pkg>...        the same, as an Lmod modulefile
-pkgx env init [--module]           the pkge shell function (and module/ml)
-pkgx env load|unload|purge         what that function evaluates
-pkgx env avail | show <env>        the declared environments
-pkgx env import <modulefile>...    convert Lmod/Environment Modules files
+pkgx --lock <file> [cmd ...]       exactly the versions a bk lock pins
+pkgx --graph [--platform os/arch] +<pkg>...
+                                   the resolved graph, for any platform
+pkgx -Q [command]                  what can be run, and from which project
 pkgx -h,--help   pkgx -v,--version
+
+pkgs ls [--tree] [node]            what is available under a node
+pkgs ls --dependents <pkg>         who NEEDS this
+pkgs why <project> <dependency>    the shortest path between them
+pkgs search [-n N] <text>          by name, or by a command it provides
+pkgs browse [node]                 walk the tree full-screen
+pkgs catalog [update|reindex]      the catalogue; update takes --platform
+pkgs store [--by-size] [--root …]  what this disk holds, and what it is for
+pkgs compat +<pin>... -- <pkg>...  how much of a set resolves under a base
+pkgs env init [--module]           the pkge shell function (and module/ml)
+pkgs env load|unload|purge         what that function evaluates
+pkgs env avail | show <env>        the declared environments
+pkgs env import <modulefile>...    convert Lmod/Environment Modules files
+pkgs completion bash|zsh|fish      <TAB> completion, for BOTH commands
+pkgs -h,--help   pkgs -v,--version
 ```
 
 ```console
@@ -78,32 +131,32 @@ git version 2.x.x
 ## Browsing the tree, and <TAB>
 
 ```console
-$ pkgx catalog update
+$ pkgs catalog update
 1907 project(s) → /home/you/.pkgx/catalog/linux-x86-64.json
 
-$ pkgx ls
+$ pkgs ls
 pkgx: catalogue /home/you/.pkgx/catalog/linux-x86-64.json, 2 hour(s) old
 curl.se                                  8.17.0, 1 under
 github.com                               41 under
 gnu.org                                  30 under
 zlib.net                                 1.3.2
 
-$ pkgx ls gnu.org
+$ pkgs ls gnu.org
 gnu.org/bash                             5.3  ✓
 gnu.org/gcc                              16.2.0, 1 under
 …
 
-$ pkgx ls doxygen.nl
+$ pkgs ls doxygen.nl
 doxygen.nl — no bottle here
 
-$ pkgx ls curl.se
+$ pkgs ls curl.se
 curl.se — 8.17.0
   curl.se/ca-certs
   nghttp2.org
   openssl.org
   zlib.net
 
-also a namespace, 3 under it: pkgx ls curl.se/
+also a namespace, 3 under it: pkgs ls curl.se/
 ```
 
 ### A node has two kinds of thing under it
@@ -119,7 +172,7 @@ A node can be **both**, and `curl.se` is: the listing shows its
 dependencies and then says where the namespace half is.
 
 ```console
-$ pkgx ls --tree curl.se
+$ pkgs ls --tree curl.se
 curl.se — 8.17.0
   curl.se/ca-certs
   nghttp2.org
@@ -200,7 +253,7 @@ Everything above descends, which answers *what does this need* — the question
 before **installing**. `--dependents` asks the one before **changing**:
 
 ```console
-$ pkgx ls --dependents openssl.org
+$ pkgs ls --dependents openssl.org
 openssl.org — 4.0.2  ✓ 3.6.0
   agwa.name/git-crypt  (no bottle here)
   apache.org/arrow  25.0.1
@@ -221,11 +274,11 @@ A catalogue records what a platform really carries, so a project with no bottle
 there has no edges there. That is why the platform is printed under the list
 rather than left to be quoted bare.
 
-`pkgx why` is the third question — not *what is in the closure* but **which
+`pkgs why` is the third question — not *what is in the closure* but **which
 link put it there**:
 
 ```console
-$ pkgx why git-scm.org zlib.net
+$ pkgs why git-scm.org zlib.net
 git-scm.org — 2.55.0  ✓ 2.47.1
   → zlib.net — 1.3.2  ✓
 ```
@@ -253,7 +306,7 @@ install can hold more than this tree does.
 ### Everything is named; what is here is marked
 
 ```console
-$ pkgx ls --tree curl.se
+$ pkgs ls --tree curl.se
 curl.se — 8.17.0
   curl.se/ca-certs  2026.09.25
   doxygen.nl  (no bottle here)
@@ -280,7 +333,7 @@ about the catalogue dressed up as a statement about the registry.
 ### And what you already have
 
 ```console
-$ pkgx ls --tree curl.se
+$ pkgs ls --tree curl.se
 curl.se — 8.17.0  ✓
   curl.se/ca-certs  2026.09.25  ✓
   doxygen.nl  (no bottle here)
@@ -290,7 +343,7 @@ curl.se — 8.17.0  ✓
 
 A catalogue says what **exists**; a reader standing in front of it mostly
 wants to know what they **have**. nix and guix show the state of the store
-in everything they print; here nothing did, and `pkgx ls curl.se` printed
+in everything they print; here nothing did, and `pkgs ls curl.se` printed
 the same page before and after installing it.
 
 A bare `✓` when what is installed is the version on offer, and
@@ -301,10 +354,10 @@ and a second one reads as a second copy in the store.
 
 ### And what that has cost you
 
-A `✓` is per project. `pkgx store` is the whole disk:
+A `✓` is per project. `pkgs store` is the whole disk:
 
 ```console
-$ pkgx store --by-size -n 6
+$ pkgs store --by-size -n 6
 ~/.pkgx
 llvm.org                                   13.8 GiB  3 versions, 8.5 GiB not the newest here
 android.com/cmdline-tools                   6.4 GiB
@@ -344,7 +397,7 @@ the least a report can do about it.
 A size is not a decision. `--root` says what a lock needs:
 
 ```console
-$ pkgx store --root seed.lock.hcl
+$ pkgs store --root seed.lock.hcl
 …
 41.2 GiB over 363 version(s) of 302 project(s)
 
@@ -380,7 +433,7 @@ seconds over 41 GiB is too long to wait to be told the arguments were wrong.
 ## Walking the tree
 
 ```console
-$ pkgx browse
+$ pkgs browse
 gnu.org — 54
 
 > gnu.org/bash                             5.3  ✓
@@ -391,7 +444,7 @@ gnu.org — 54
 · / search · space pin for the exit line · q quit, printing what is pinned
 ```
 
-`pkgx ls` answers one question per command, which is right for a script and
+`pkgs ls` answers one question per command, which is right for a script and
 wrong for a person who does not yet know what they are looking for: reaching
 `curl.se/ca-certs` from `curl.se` costs two commands and knowing that the
 trailing slash exists. [`nix-tree`](https://github.com/utdemir/nix-tree) is
@@ -409,18 +462,18 @@ the other way. The header says which way you are facing, and descending from a
 dependents list keeps walking *up*: who needs the thing that needs it.
 
 `q` prints what you pinned on **stdout** while the screen goes to stderr, so
-`pkgx +$(pkgx browse)` composes instead of putting borders on a command line.
+`pkgx +$(pkgs browse)` composes instead of putting borders on a command line.
 
 **It reads the cached catalogue and nothing else** — no network, no
 resolution, no store walk per keystroke. And **without a terminal it prints
-the tree and exits**: `pkgx browse | less`, a CI log and a scratch image are
+the tree and exits**: `pkgs browse | less`, a CI log and a scratch image are
 the same case, and a command that refuses to work when its output is a pipe
 is one people stop putting in scripts.
 
 ## You know the command, not the package
 
 ```console
-$ pkgx search rg
+$ pkgs search rg
 crates.io/ripgrep                        rg  14.1.1
 aardvark.io/rgbds                        rgbasm  0.9.0
 ```
@@ -475,7 +528,7 @@ Three things it will not do:
   PATH, not who owns the name. Two candidates is an error naming both;
   picking one would run the wrong program under the right name.
 - **Blame the pantry when there is no catalogue.** A bare word with no
-  catalogue says `run: pkgx catalog update`, because a bare word can never
+  catalogue says `run: pkgs catalog update`, because a bare word can never
   be a project and a message about a missing *recipe* would be about the
   wrong thing.
 - **Read the catalogue for a project name.** `pkgx +deps` runs inside every
@@ -493,7 +546,7 @@ characters is not a search, it is a sieve: `search rg` used to return 625
 projects, 550 of them because `rg` sits inside `.org` — the result anybody
 wanted was still first, and 550 lines of noise stood behind it.
 
-Nothing found exits **non-zero**, so `pkgx search x || echo none` works. And
+Nothing found exits **non-zero**, so `pkgs search x || echo none` works. And
 a catalogue that carries no command names says so rather than letting "no
 such package" stand for "this catalogue cannot answer that kind of
 question".
@@ -501,7 +554,7 @@ question".
 ### Completion asks the binary
 
 ```sh
-eval "$(pkgx completion bash)"     # or zsh, or: pkgx completion fish | source
+eval "$(pkgs completion bash)"     # or zsh, or: pkgs completion fish | source
 ```
 
 ```console
@@ -554,12 +607,12 @@ in one pull, per platform because what is available differs by architecture.
 ### `--platform`, for a question about a machine you do not have
 
 ```console
-$ pkgx catalog update --platform linux/x86-64
+$ pkgs catalog update --platform linux/x86-64
 1915 project(s) → …/catalog/linux-x86-64.json
 ```
 
 It writes to **that platform's** path, so a foreign catalogue cannot be
-mistaken for the host's: `pkgx ls` reads `catalog/<host>.json` and will not
+mistaken for the host's: `pkgs ls` reads `catalog/<host>.json` and will not
 see it.
 
 `fetchCatalogFor` always took an os and an arch; only this command pinned
@@ -581,7 +634,7 @@ $ bk vulnfetch -dir pantry -catalog catalog/linux-x86-64.json
 
 ### One command fetches it; nothing else does
 
-`pkgx catalog update` is **the only** thing that asks the registry what
+`pkgs catalog update` is **the only** thing that asks the registry what
 exists. `ls` and `<TAB>` read the file it wrote, and nothing on that path
 opens a socket.
 
@@ -627,7 +680,7 @@ sweeping):
 | **the name index** (38 KB), read + scan | **0.08 ms** |
 
 So the **decode** was all of it, and streaming only the two fields completion
-needs is merely twice as fast — not enough to matter. `pkgx catalog update`
+needs is merely twice as fast — not enough to matter. `pkgs catalog update`
 therefore also writes `catalog/<os>-<arch>.names`: one line per project, the
 name and the newest version, which is everything `<TAB>` shows. `ls`,
 `--tree`, `search` and `browse` keep reading the catalogue — they need
@@ -640,7 +693,7 @@ project count, both checked on read and both free; and a failed check is not an
 error — it falls back to the catalogue, which is the authority. The index can
 only make completion faster or make it do exactly what it did before.
 
-`pkgx catalog reindex` rebuilds it from the catalogue already on disk, with no
+`pkgs catalog reindex` rebuilds it from the catalogue already on disk, with no
 network — for an image that **ships** a catalogue, which had no way to get an
 index and so took the slow path in the one environment that can least afford
 it.
@@ -671,18 +724,18 @@ The tool has its own tests, because a measuring tool nobody measures is how
 a plausible wrong number gets published.
 
 The price is that the index goes stale and nothing tells you by magic, so
-every command that reads it says how old it is, and `pkgx catalog` says it
+every command that reads it says how old it is, and `pkgs catalog` says it
 on its own:
 
 ```console
-$ pkgx catalog
+$ pkgs catalog
 /home/you/.pkgx/catalog/linux-x86-64.json
 1907 project(s), 905 with dependencies, 2 hour(s) old
 ```
 
-On a machine that has never fetched one, that command and `pkgx ls` both
+On a machine that has never fetched one, that command and `pkgs ls` both
 name the one that fixes it. A catalogue that is **there and will not parse**
-gets a different sentence, naming the file: "run `pkgx catalog update`" is
+gets a different sentence, naming the file: "run `pkgs catalog update`" is
 no help at all for that, and sending somebody to a command that cannot work
 is worse than saying nothing.
 
@@ -691,7 +744,7 @@ air-gapped image that ships one beside the store, or one being inspected
 before it is published. Set and unreadable is a **refusal**, not a quiet
 fall back to the local store: somebody who names a file means that file.
 
-When there is no catalogue at all, `pkgx ls` falls back to **what is
+When there is no catalogue at all, `pkgs ls` falls back to **what is
 installed** and says so in its header. That is not a lesser answer offline
 or in a fresh scratch image: it is the only true one available, and the two
 are never merged, because "available" about a mix of a registry and a local
@@ -735,7 +788,7 @@ for a shell you live in. A lock names *versions*. Two paths, side by side.
 ### And an environment can have one beside it
 
 ```console
-$ pkgx env show cfd
+$ pkgs env show cfd
 env "cfd"
   description  the solver stack, as validated on 2026-09-01
   declared in  /site/environments/site.hcl2
@@ -779,7 +832,7 @@ A module system does two things: it resolves what a package needs, and it edits
 your shell. `pkgx +a +b` already did the first. `pkge` does the second.
 
 ```console
-$ eval "$(pkgx env init)"          # in a profile
+$ eval "$(pkgs env init)"          # in a profile
 $ pkge load gnu.org/sed jq
 $ pkge list
 gnu.org/sed
@@ -802,7 +855,7 @@ env "cfd" {
 }
 ```
 
-`pkge load cfd` — and `pkgx env avail` / `pkgx env show cfd` to see what a site
+`pkge load cfd` — and `pkgs env avail` / `pkgs env show cfd` to see what a site
 declares and from which file. An environment is not a lockfile: it names
 constraints, and the closure is resolved at load time from the signed registry,
 so a login node and a container agree.
@@ -819,7 +872,7 @@ $ pkgx --modulefile +openmpi.org@5 > $MODULEPATH_DIR/openmpi/5.0.8.lua
 
 ### Without one
 
-`pkgx env init --module` also defines `module` and `ml`, for a container, a
+`pkgs env init --module` also defines `module` and `ml`, for a container, a
 laptop or a cluster built on this toolchain. It **refuses** to install itself
 where an Lmod already exists, and says to generate modulefiles instead: two
 implementations answering one command is how a support ticket becomes
@@ -832,7 +885,7 @@ could act on.
 ### Converting a site's modulefiles
 
 ```console
-$ pkgx env import /opt/modulefiles/openmpi.lua /opt/modulefiles/hdf5 \
+$ pkgs env import /opt/modulefiles/openmpi.lua /opt/modulefiles/hdf5 \
     > $PKGX_DIR/environments/site.hcl2
 ```
 
@@ -843,7 +896,7 @@ subtly wrong, found inside somebody's job. This refuses anything it would have
 to guess at, names the line, and writes nothing at all if any file was refused.
 
 ```console
-$ pkgx env import /opt/modulefiles/openmpi.lua /opt/modulefiles/hdf5
+$ pkgs env import /opt/modulefiles/openmpi.lua /opt/modulefiles/hdf5
 /opt/modulefiles/openmpi.lua: 3 statement(s) this converter will not guess at:
   line 3: not a plain call: this converter reads statements, it does not run Lua
     local root = "/opt/openmpi/5.0.8"

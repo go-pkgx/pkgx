@@ -226,19 +226,19 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 		prefix = fs.Arg(0)
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(stderr, "pkgx: usage: pkgx ls [--tree] [--depth N] [--dependents] [node]")
+		fmt.Fprintln(stderr, pfx()+"usage: "+tool+" ls [--tree] [--depth N] [--dependents] [node]")
 		return 2
 	}
 	if *dependents && prefix == "" {
 		// "Who needs nothing in particular" has no answer, and listing
 		// every project with its dependents would be the whole catalogue
 		// printed sideways.
-		fmt.Fprintln(stderr, "pkgx: --dependents needs a project: pkgx ls --dependents openssl.org")
+		fmt.Fprintln(stderr, pfx()+"--dependents needs a project: "+tool+" ls --dependents openssl.org")
 		return 2
 	}
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, "pkgx: PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	// Two different falls back to the store, and they want two different
@@ -249,12 +249,12 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 	say := func() {
 		switch {
 		case src != "installed":
-			fmt.Fprintf(stderr, "pkgx: catalogue %s, %s\n", src, cat.Age(time.Now()))
+			fmt.Fprintf(stderr, pfx()+"catalogue %s, %s\n", src, cat.Age(time.Now()))
 		case catalogAbsent():
-			fmt.Fprintln(stderr, "pkgx: showing what is INSTALLED — no catalogue yet; run: pkgx catalog update")
+			fmt.Fprintln(stderr, pfx()+"showing what is INSTALLED — no catalogue yet; run: "+tool+" catalog update")
 		default:
 			osn, arch := bottle.HostSlug()
-			fmt.Fprintf(stderr, "pkgx: showing what is INSTALLED — %s could not be read\n", catalogPath(osn, arch))
+			fmt.Fprintf(stderr, pfx()+"showing what is INSTALLED — %s could not be read\n", catalogPath(osn, arch))
 		}
 	}
 
@@ -302,7 +302,7 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 		// A namespace of the same name is still worth naming, or
 		// `curl.se/ca-certs` becomes unreachable from `curl.se`.
 		if kids := cat.Children(node); len(kids) > 0 {
-			fmt.Fprintf(stdout, "\nalso a namespace, %d under it: pkgx ls %s/\n", len(kids), node)
+			fmt.Fprintf(stdout, "\nalso a namespace, %d under it: %s ls %s/\n", len(kids), tool, node)
 		}
 		return 0
 	}
@@ -316,9 +316,9 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 		// to run about it.
 		say()
 		if prefix == "" {
-			fmt.Fprintln(stderr, "pkgx: nothing to list")
+			fmt.Fprintln(stderr, pfx()+"nothing to list")
 		} else {
-			fmt.Fprintf(stderr, "pkgx: nothing under %q\n", prefix)
+			fmt.Fprintf(stderr, pfx()+"nothing under %q\n", prefix)
 		}
 		return 1
 	}
@@ -504,8 +504,13 @@ func completionsFor(word string) []completion {
 
 	// A word that is not a package at all: offer the subcommands, once,
 	// when nothing has been typed that looks like a path.
+	//
+	// ⛔ ONLY UNDER `pkgs`. These are its verbs, and offering them at a
+	// pkgx prompt would put `ls` back in front of gnu.org/coreutils' ls —
+	// in the one place a user is least able to tell which they are being
+	// offered, since a completion shows a word and no provenance.
 	var out []completion
-	if !plus && !strings.Contains(bare, "/") && !strings.Contains(bare, ".") {
+	if tool == "pkgs" && !plus && !strings.Contains(bare, "/") && !strings.Contains(bare, ".") {
 		for _, s := range subcommandCompletions {
 			if strings.HasPrefix(s.value, bare) {
 				out = append(out, s)
@@ -555,48 +560,63 @@ var subcommandCompletions = []completion{
 // without pkgx changing, so anything cleverer here would be a second place
 // to keep level with the first. There is no completion framework to install
 // and nothing to generate, which is what makes this work in a scratch image.
+// It prints the snippet for BOTH binaries, because a person installing
+// completion wants to complete what they type, and they type both: `pkgx`
+// takes package names, `pkgs` takes a verb and then a node. One eval, two
+// `complete` registrations, and the two differ only in the word.
 func runCompletionSnippet(shell string, stdout, stderr io.Writer) int {
-	s, ok := completionSnippets[shell]
+	t, ok := completionTemplates[shell]
 	if !ok {
-		fmt.Fprintf(stderr, "pkgx: usage: pkgx completion bash|zsh|fish\n")
+		fmt.Fprintln(stderr, pfx()+"usage: "+tool+" completion bash|zsh|fish")
 		return 2
 	}
-	fmt.Fprint(stdout, s)
+	for _, name := range []string{"pkgx", "pkgs"} {
+		fmt.Fprint(stdout, strings.ReplaceAll(t, toolToken, name))
+	}
 	return 0
 }
 
-var completionSnippets = map[string]string{
-	"bash": `# pkgx completion — eval "$(pkgx completion bash)"
-_pkgx_complete() {
+// toolToken is what the templates below carry where the binary's name goes.
+//
+// ⛔ A TOKEN AND ReplaceAll, NOT Sprintf. The zsh snippet contains
+// `${l%%\t*}` — a shell parameter expansion whose `%%` Sprintf would render
+// as a single `%`, producing a snippet that looks right in a diff and
+// silently completes nothing. A format string is the wrong instrument for
+// text that is itself full of `%`.
+const toolToken = "@TOOL@"
+
+var completionTemplates = map[string]string{
+	"bash": `# @TOOL@ completion — eval "$(pkgs completion bash)"
+_@TOOL@_complete() {
   local i n=0 words=()
   for ((i = 0; i < ${#COMP_WORDS[@]}; i++)); do
     words+=("${COMP_WORDS[i]}")
     [ "$i" -lt "$COMP_CWORD" ] && n=$((n + 1))
   done
   local IFS=$'\n'
-  COMPREPLY=($(PKGX_GET_COMPLETIONS=$((COMP_CWORD - 1)) pkgx "${words[@]:1}" 2>/dev/null | cut -f1))
+  COMPREPLY=($(PKGX_GET_COMPLETIONS=$((COMP_CWORD - 1)) @TOOL@ "${words[@]:1}" 2>/dev/null | cut -f1))
 }
-complete -o nospace -F _pkgx_complete pkgx
+complete -o nospace -F _@TOOL@_complete @TOOL@
 `,
-	"zsh": `# pkgx completion — eval "$(pkgx completion zsh)"
-_pkgx_complete() {
+	"zsh": `# @TOOL@ completion — eval "$(pkgs completion zsh)"
+_@TOOL@_complete() {
   local -a lines
-  lines=(${(f)"$(PKGX_GET_COMPLETIONS=$((CURRENT - 1)) pkgx ${words[2,-1]} 2>/dev/null)"})
+  lines=(${(f)"$(PKGX_GET_COMPLETIONS=$((CURRENT - 1)) @TOOL@ ${words[2,-1]} 2>/dev/null)"})
   local -a vals descs
   local l
   for l in $lines; do
     vals+=("${l%%	*}")
     descs+=("${l%%	*}:${l#*	}")
   done
-  _describe -t pkgx 'pkgx' descs vals -S ''
+  _describe -t @TOOL@ '@TOOL@' descs vals -S ''
 }
-compdef _pkgx_complete pkgx
+compdef _@TOOL@_complete @TOOL@
 `,
-	"fish": `# pkgx completion — pkgx completion fish | source
-function __pkgx_complete
+	"fish": `# @TOOL@ completion — pkgs completion fish | source
+function __@TOOL@_complete
   set -l words (commandline -opc) (commandline -ct)
-  PKGX_GET_COMPLETIONS=(math (count $words) - 2) pkgx $words[2..-1] 2>/dev/null
+  PKGX_GET_COMPLETIONS=(math (count $words) - 2) @TOOL@ $words[2..-1] 2>/dev/null
 end
-complete -c pkgx -f -a '(__pkgx_complete)'
+complete -c @TOOL@ -f -a '(__@TOOL@_complete)'
 `,
 }

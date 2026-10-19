@@ -234,7 +234,7 @@ func expandSpecs(specs []string, envs map[string]environment) []string {
 
 // envLockWarn is where a lock's complaints go: stderr, never stdout, since
 // `eval "$(pkge load cfd)"` is reading the other one.
-var envLockWarn = func(msg string) { fmt.Fprintln(os.Stderr, "pkgx:", msg) }
+var envLockWarn = func(msg string) { fmt.Fprintln(os.Stderr, tool+":", msg) }
 
 // sortedEnvironments returns the environments by name, for `avail`.
 func sortedEnvironments(envs map[string]environment) []environment {

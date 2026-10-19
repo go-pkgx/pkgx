@@ -58,86 +58,33 @@ usage:
                                      from a mac. A version that exists but has
                                      no bottle THERE is named as such, which
                                      is the answer a recipe author needs
-  pkgx compat +<pin>... -- <pkg>...  how much of a package set resolves under
-                                     those base versions, and what each refusal
-                                     blames. Projects on stdin when none given
-  pkgx env init [--module]           print the pkge shell function, for
-                                     eval "$(pkgx env init)" in a profile:
-                                     pkge load|unload|purge|list|save|restore
-                                     --module also defines module() and ml(),
-                                     where no other module system exists
-  pkgx ls [--tree] [--depth N] [node]
-                                     what is available under a node. A
-                                     NAMESPACE node lists what it contains,
-                                     a PACKAGE node what it needs; a
-                                     trailing slash asks for the namespace
-                                     where a node is both (curl.se is).
-                                     --tree descends, --depth bounds it.
-                                     Read from the catalogue, so no network
-  pkgx ls --dependents [--tree] <pkg>
-                                     the other direction: who NEEDS this.
-                                     What you ask before CHANGING something,
-                                     which no amount of descending answers.
-                                     RUNTIME dependents on this platform —
-                                     a build-only user is in no catalogue,
-                                     so this is a closure, not a rebuild set
-  pkgx why <project> <dependency>    the shortest path by which one needs the
-                                     other, as "nix why-depends" answers it:
-                                     an explanation, not every route. Says so
-                                     plainly when there is none. Declared
-                                     dependencies, not scanned bytes
-  pkgx catalog update                fetch the catalogue of what this platform
-                                     has, into $PKGX_DIR/catalog. THE ONLY
-                                     command that asks the registry what
-                                     exists; ls and <TAB> then read the file,
-                                     so they are instant and work offline
-  pkgx catalog update --platform os/arch
-                                     the same, for a platform you are not on:
-                                     linux/x86-64 from a mac, to ask what a
-                                     machine you do not have would get. Writes
-                                     to that platform's own file, so ls and
-                                     <TAB> still read the host's
-  pkgx catalog reindex               rebuild the name index <TAB> reads from
-                                     the catalogue already on disk, with NO
-                                     network — for an image that ships one
-  pkgx catalog                       which catalogue is here, and how old
-  pkgx store [--by-size] [-n N]      what the bottle store holds: every version
-                                     an ephemeral run ever pulled, and its
-                                     size. Nothing removes one, so it only
-                                     grows. Reports and deletes NOTHING —
-                                     there are no roots here, so "older than
-                                     another version" is a fact about the
-                                     disk, not a claim that it is unused.
-                                     Walks the tree, so it costs seconds
-  pkgx store --root <lock> ...       and what any of it is FOR: a lock pins
-                                     a whole closure, so it is a root set.
-                                     Reports live against dead as guix gc
-                                     --list-live does — and like it,
-                                     removes NOTHING. "Dead" means not
-                                     reachable from the roots YOU named;
-                                     name another lock and another half is
-                                     dead. Repeatable; offline
-  pkgx search [-n N] <text>          find a package by its name or by a COMMAND
-                                     it provides: "pkgx search rg" finds
-                                     crates.io/ripgrep, which no guess at the
-                                     project name reaches. Offline
-  pkgx browse [node]                 walk the tree full-screen: arrows to move
-                                     and descend, tab cycles names,
-                                     dependencies and dependents, / searches, space pins,
-                                     q to quit printing what you pinned — so
-                                     pkgx +$(pkgx browse) composes. Reads the
-                                     cached catalogue, so no network; without
-                                     a terminal it prints the tree and exits
-  pkgx completion bash|zsh|fish      the shell snippet for <TAB> completion.
-                                     It asks THIS binary, so it follows the
-                                     registry without being regenerated
-  pkgx env avail                     list the declared environments
-  pkgx env show <environment>        what an environment brings, and from where
-  pkgx env import <modulefile>...    convert Lmod (.lua) or Environment Modules
-                                     (TCL) modulefiles into HCL2 environments,
-                                     refusing anything it would have to guess at
+  pkgx -Q [command]                  what can be run: with a command, the
+                                     project(s) that provide it, one per line
+                                     and exit 1 if none does; with nothing,
+                                     every command the catalogue carries.
+                                     Reads the catalogue, so no network
   pkgx -h, --help                    show this help
   pkgx -v, --version                 show version
+
+asking ABOUT packages is pkgs, a separate command:
+  pkgs ls [--tree] [node]            what is available under a node, and what
+                                     a package needs
+  pkgs ls --dependents <pkg>         the other direction: who NEEDS this
+  pkgs why <project> <dependency>    the shortest path by which one needs the
+                                     other
+  pkgs search [-n N] <text>          find a package by name or by a command it
+                                     provides
+  pkgs browse [node]                 walk the tree full-screen
+  pkgs catalog [update|reindex]      which catalogue is here; update fetches
+                                     one, and takes --platform os/arch
+  pkgs store [--by-size] [--root …]  what this disk holds, and what it is for
+  pkgs compat +<pin>... -- <pkg>...  how much of a set resolves under a base
+  pkgs env init|avail|show|import    environments, and the pkge front-end
+  pkgs completion bash|zsh|fish      <TAB> completion, for both commands
+
+  They are two commands because the first word after pkgx is a PACKAGE, as
+  it is upstream: "pkgx ls" runs gnu.org/coreutils' ls. "pkgs -h" has the
+  long form of everything above.
 
 env:
   PKGX_DIR     bottle store (default: ~/.pkgx)
@@ -166,6 +113,44 @@ env:
 // what a version means.
 func Pkgx(argv []string) int { return run(argv) }
 
+// tool is the binary the user actually typed — "pkgx" or "pkgs" — and it is
+// what every diagnostic and usage line in this package names.
+//
+// ⛔ NOT A COSMETIC. Two binaries ship from one package, and a message that
+// says "pkgx: usage: pkgx catalog update" when the reader typed `pkgs
+// catalog` sends them to a command that no longer has that verb. The
+// variable exists so the wrong name cannot be printed by accident: there is
+// one place to set it, and both mains set it before anything runs.
+//
+// Only the PROGRAM NAME uses it. `~/.pkgx/config.hcl2`, `PKGX_DIR` and the
+// rest are paths and variables shared by both binaries, and they keep the
+// spelling the filesystem and the environment use.
+var tool = "pkgx"
+
+// pfx is the prefix every diagnostic in this package carries: the binary the
+// user typed, then a colon and a space.
+//
+// A function rather than a constant because `tool` is set at startup, and a
+// function rather than a literal repeated forty times because two binaries
+// print these lines and only one of the two names can be right in any of
+// them.
+//
+// ⛔ NOT NAMED `say`: runLs already has a LOCAL closure by that name, which
+// prints the catalogue's provenance header. A package-level `say` compiled
+// everywhere except inside that one function, where the local shadowed it
+// and the compiler said "say() (no value) used as value" — two lines away
+// from anything I had edited.
+func pfx() string { return tool + ": " }
+
+// bottleWarn routes the backend's diagnostics to stderr under the right name.
+//
+// A closure the resolver could not complete is not an error there — it is an
+// error MUCH later, when the program starts and reports "cannot open shared
+// object file". Print those; bottle stays silent by default.
+func bottleWarn() {
+	bottle.Warn = func(msg string) { fmt.Fprintln(os.Stderr, pfx()+msg) }
+}
+
 // configError reports a load/parse failure of ~/.pkgx/config.hcl2, if any. It
 // is a var so tests can drive the startup-warning path.
 var configError = bottle.ConfigError
@@ -185,9 +170,9 @@ func run(argv []string) int {
 	// A closure the resolver could not complete is not an error here — it is an
 	// error MUCH later, when the program starts and reports "cannot open shared
 	// object file". Print those diagnostics; bottle stays silent by default.
-	bottle.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "pkgx: "+msg) }
+	bottleWarn()
 	if err := configError(); err != nil {
-		fmt.Fprintln(os.Stderr, "pkgx: warning: ignoring ~/.pkgx/config.hcl2: "+err.Error())
+		fmt.Fprintln(os.Stderr, pfx()+"warning: ignoring ~/.pkgx/config.hcl2: "+err.Error())
 	}
 	if len(argv) == 0 {
 		fmt.Fprint(os.Stderr, usage)
@@ -201,80 +186,25 @@ func run(argv []string) int {
 	}
 
 	switch argv[0] {
-	case "ls":
-		return runLs(argv[1:], os.Stdout, os.Stderr)
-	case "catalog":
-		return runCatalogCmd(argv[1:], os.Stdout, os.Stderr)
-	case "store":
-		return runStore(argv[1:], os.Stdout, os.Stderr)
-	case "why":
-		return runWhy(argv[1:], os.Stdout, os.Stderr)
-	case "search":
-		return runSearch(argv[1:], os.Stdout, os.Stderr)
-	case "browse":
-		return runBrowse(argv[1:], os.Stdin, os.Stdout, os.Stderr)
-	case "completion":
-		if len(argv) < 2 {
-			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx completion bash|zsh|fish")
-			return 2
-		}
-		return runCompletionSnippet(argv[1], os.Stdout, os.Stderr)
-	case "compat":
-		// How far does a chosen base reach? See runCompat.
-		plus, rest := splitPlus(argv[1:])
-		if err := runCompat(plus, rest, os.Stdin, os.Stdout); err != nil {
-			if err != errSilent {
-				fmt.Fprintln(os.Stderr, "pkgx:", err)
-			}
-			return 1
-		}
-		return 0
 	case "-h", "--help":
 		fmt.Print(usage)
 		return 0
 	case "-v", "--version":
 		fmt.Println("pkgx " + version)
 		return 0
+	case "-Q", "--query":
+		// Upstream's query mode, which this fork had never implemented —
+		// and whose absence is why nine verbs were put in the one position
+		// upstream reserves for a package. See runQuery.
+		return runQuery(argv[1:], os.Stdout, os.Stderr)
 	}
 
-	// `pkgx env …` is the environment front-end's one entry point. A verb rather
-	// than four top-level flags: the flags are not options on running a package,
-	// they are a different job, and `pkgx --help` should not have to list them
-	// among the ways to run something.
-	if argv[0] == "env" {
-		if len(argv) == 1 {
-			fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env init|load|unload|purge|avail|show|import")
-			return 2
-		}
-		var err error
-		switch argv[1] {
-		case "init":
-			err = modeShellInit(len(argv) > 2 && argv[2] == "--module", os.Stdout)
-		case "load", "unload", "purge":
-			err = modeShell(argv[1], argv[2:], composeSpecs, osLookupEnv, os.Stdout)
-		case "avail":
-			err = modeAvail(os.Stdout)
-		case "import":
-			if len(argv) < 3 {
-				fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env import <modulefile>...")
-				return 2
-			}
-			err = modeImport(argv[2:], os.Stdout, os.Stderr)
-		case "show":
-			if len(argv) < 3 {
-				fmt.Fprintln(os.Stderr, "pkgx: usage: pkgx env show <environment>")
-				return 2
-			}
-			err = modeShow(argv[2], os.Stdout)
-		default:
-			fmt.Fprintln(os.Stderr, "pkgx: unknown env command "+argv[1]+" (init|load|unload|purge|avail|show|import)")
-			return 2
-		}
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
-			return 1
-		}
-		return 0
+	// ⛔ NO VERBS HERE ANY MORE. `pkgx ls` runs gnu.org/coreutils' ls again,
+	// as upstream does, and the nine verbs moved to `pkgs` (see pkgs.go).
+	// A word that is one of theirs AND is not a package gets told where it
+	// went, once, instead of failing with "no such package".
+	if code, said := unknownVerb(argv[0], os.Stderr); said {
+		return code
 	}
 
 	// `--lock` BEFORE the format split, so `pkgx --lock f.hcl --graph`
@@ -505,11 +435,11 @@ func exec(plus, rest []string, format outputFormat, graphOS, graphArch string, s
 		if len(rest) == 0 {
 			return fmt.Errorf("nothing to run (try --help)")
 		}
-		proj, cons, err := cmds.resolve(rest[0])
+		proj, cons, prog, err := runTarget(rest[0], cmds)
 		if err != nil {
 			return err
 		}
-		runProject, args = proj, rest[1:]
+		runProject, program, args = proj, prog, rest[1:]
 		roots[proj] = cons
 	} else {
 		for _, p := range plus {
@@ -795,11 +725,66 @@ func versionOf(project string, closure []bottle.Resolved) string {
 	return ""
 }
 
+// runTarget reads the first word of `pkgx <word> args...` and says which
+// project to materialise, under what constraint, and which PROGRAM to run.
+//
+// ⛔ IT RETURNS THE PROGRAM, and that is the whole reason it is a function.
+// The two lines it holds used to sit inline in exec, where no test could
+// reach them without materialising a closure and exec'ing something — so a
+// mutation that dropped the program survived the suite, and `pkgx ls` went
+// back to running coreutils' `[` with nothing to say so. Measured: the
+// mutation "bare command not remembered" was NOT caught before this split.
+//
+// A bare word is a COMMAND: `pkgx ls` must run ls, not the first binary
+// gnu.org/coreutils happens to provide. A dotted or slashed word is a
+// PROJECT and names no command, so the program is empty and the caller
+// keeps the primary-program behaviour — `pkgx gnu.org/bash` runs bash.
+func runTarget(word string, cmds *commandMapper) (project, constraint, program string, err error) {
+	proj, cons, err := cmds.resolve(word)
+	if err != nil {
+		return "", "", "", err
+	}
+	if bareWord(word) {
+		return proj, cons, projectOf(word), nil
+	}
+	return proj, cons, "", nil
+}
+
+// projectOf is `project`, named apart so runTarget reads as what it does.
+// `project` strips a version constraint: the word in `pkgx ls@9` is ls.
+func projectOf(spec string) string { return project(spec) }
+
 // resolveBin finds the absolute path of the binary to exec: a project's primary
 // program (runProject set), or a named program looked up across binDirs. The
 // result is passed through bottle.ResolveBinPath so a Windows lookup lands on
 // the ".exe" image.
 func resolveBin(runProject, program string, binDirs []string, closure []bottle.Resolved, dir string) (string, error) {
+	// ⛔ THE WORD THE USER TYPED WINS OVER THE PROJECT'S PRIMARY BINARY.
+	//
+	// `pkgx ls --version` resolves the COMMAND ls to gnu.org/coreutils, and
+	// before this it then ran that project's primary program — which for
+	// coreutils is `[`. The output was GNU coreutils' own version banner,
+	// correct-looking and from the wrong program:
+	//
+	//	$ pkgx ls --version
+	//	[ (GNU coreutils) 9.11
+	//	Written by Kevin Braunsdorf and Matthew Bradburn
+	//
+	// Nobody had met it because `ls` used to be a pkgx subcommand and never
+	// reached this path at all. Splitting `pkgs` out gave the word back to
+	// the registry and uncovered it.
+	if runProject != "" && program != "" {
+		prefix := bottle.PrefixOf(runProject, closure, dir)
+		cand := bottle.ResolveBinPath(filepath.Join(prefix, "bin", program))
+		if _, err := os.Stat(cand); err == nil {
+			return cand, nil
+		}
+		// Not there under that name: fall through to the primary program
+		// rather than refusing. The mapper said this project provides the
+		// command, and a recipe can install it somewhere other than its own
+		// bin — the old behaviour is the better guess, not a silent wrong
+		// answer, because the next step reports what it could not run.
+	}
 	if runProject != "" {
 		_, provides, err := bottle.FetchMeta(runProject)
 		if err != nil {

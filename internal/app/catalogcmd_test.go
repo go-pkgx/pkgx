@@ -244,27 +244,33 @@ func TestCatalogStatusReads(t *testing.T) {
 // directly and is unreachable from the command line is not a subcommand. An
 // earlier test in this repo tested a function and not the wiring, and the
 // wiring was what was broken.
+//
+// ⛔ IT DISPATCHES THROUGH `Pkgs`, NOT `run`. The verb moved there when the
+// two binaries were split; asserting it from `run` would assert the defect
+// back into place, since the whole point is that `pkgx catalog` is now a
+// request to run a package called catalog.
 func TestCatalogIsWiredIntoTheDispatch(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PKGX_DIR", dir)
 	t.Setenv("PKGX_CATALOG", "")
 	withFetch(t, smallCatalog(), nil)
+	asPkgs(t)
 
 	var code int
-	out := captureStdout(t, func() { code = run([]string{"catalog"}) })
+	out := captureStdout(t, func() { code = Pkgs([]string{"catalog"}) })
 	if code != 0 {
-		t.Fatalf("pkgx catalog = %d", code)
+		t.Fatalf("pkgs catalog = %d", code)
 	}
-	if !strings.Contains(out, "pkgx catalog update") {
-		t.Errorf("pkgx catalog printed %q", out)
+	if !strings.Contains(out, "pkgs catalog update") {
+		t.Errorf("pkgs catalog printed %q", out)
 	}
 
-	out = captureStdout(t, func() { code = run([]string{"catalog", "update"}) })
+	out = captureStdout(t, func() { code = Pkgs([]string{"catalog", "update"}) })
 	if code != 0 {
-		t.Fatalf("pkgx catalog update = %d", code)
+		t.Fatalf("pkgs catalog update = %d", code)
 	}
 	if !strings.Contains(out, "2 project(s)") {
-		t.Errorf("pkgx catalog update printed %q", out)
+		t.Errorf("pkgs catalog update printed %q", out)
 	}
 
 	// And it is offered at the prompt, or nobody finds it.
@@ -275,23 +281,41 @@ func TestCatalogIsWiredIntoTheDispatch(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("`pkgx cat<TAB>` does not offer catalog")
+		t.Error("pkgs cat<TAB> does not offer catalog")
 	}
 
 	// A third word is a usage error, not a silently ignored argument.
 	if code := runCatalogCmd([]string{"update", "extra"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
-		t.Errorf("pkgx catalog update extra = %d, want 2", code)
+		t.Errorf("pkgs catalog update extra = %d, want 2", code)
 	}
 }
 
 // TestUsageMentionsCatalog: a command nobody can discover is a command
 // nobody runs, and `--help` is where a person looks first.
+//
+// Both usages are checked. pkgs owns the verb, and pkgx has to NAME it:
+// somebody who typed `pkgx catalog` yesterday looks at `pkgx -h` first, and
+// a help text that simply dropped the word would read as "removed".
 func TestUsageMentionsCatalog(t *testing.T) {
-	for _, want := range []string{"pkgx catalog update", "PKGX_CATALOG"} {
-		if !strings.Contains(usage, want) {
-			t.Errorf("usage does not mention %q", want)
+	for _, want := range []string{"pkgs catalog", "PKGX_CATALOG"} {
+		if !strings.Contains(pkgsUsage, want) {
+			t.Errorf("pkgs usage does not mention %q", want)
 		}
 	}
+	if !strings.Contains(usage, "pkgs catalog") {
+		t.Errorf("pkgx usage does not point at pkgs catalog:\n%s", usage)
+	}
+}
+
+// asPkgs runs the rest of a test under the `pkgs` binary's name, and puts it
+// back afterwards. The package-level `tool` decides what every diagnostic
+// says, so a test that forgets this asserts pkgx's wording against pkgs's
+// output and passes for the wrong reason.
+func asPkgs(t *testing.T) {
+	t.Helper()
+	prev := tool
+	tool = "pkgs"
+	t.Cleanup(func() { tool = prev })
 }
 
 // ⛔ A QUESTION ABOUT ANOTHER PLATFORM MUST BE ASKABLE AT ALL.

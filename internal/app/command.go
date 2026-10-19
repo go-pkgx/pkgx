@@ -93,7 +93,7 @@ func (m *commandMapper) resolve(s string) (string, string, error) {
 		// can only produce an error about the wrong thing — which is exactly
 		// what the report ran into, and why it reads as "go-pkgx does not
 		// know hugo" rather than "this store has no catalogue yet".
-		return "", "", fmt.Errorf("%q is a command, not a project, and there is no catalogue to look it up in — run: pkgx catalog update", cmd)
+		return "", "", fmt.Errorf("%q is a command, not a project, and there is no catalogue to look it up in — run: pkgs catalog update", cmd)
 	}
 	switch hits := m.cat.ProvidersOf(cmd); len(hits) {
 	case 1:
@@ -103,7 +103,7 @@ func (m *commandMapper) resolve(s string) (string, string, error) {
 		// measurement), so a miss is not proof that nothing provides the
 		// command — hence "declares" rather than "provides", and a pointer
 		// at the search that looks in names too.
-		return "", "", fmt.Errorf("no project in %s declares the command %q — try: pkgx search %s", m.src, cmd, cmd)
+		return "", "", fmt.Errorf("no project in %s declares the command %q — try: pkgs search %s", m.src, cmd, cmd)
 	default:
 		// ⛔ NEVER pick one. `provides` says what a project puts on PATH,
 		// not who owns the name, so there is no basis here for choosing —
