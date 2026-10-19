@@ -313,3 +313,38 @@ func TestRunTargetKeepsTheTypedCommand(t *testing.T) {
 		}
 	}
 }
+
+// ⛔ THE RELEASE STAMPS THE SYMBOL THAT EXISTS.
+//
+// `version` lived in package main until the two binaries were split, and
+// release.yml went on stamping `-X main.version`. A `-X` naming a symbol
+// that does not exist is SILENT: the linker neither warns nor fails. v0.22.0
+// therefore built twelve binaries, every one stamped v0.22.0 in its build
+// info and every one printing "dev", and the only thing that noticed was the
+// workflow's own comparison of the PRINTED version against the tag — which
+// runs after six cross-compilations, on a tag that cannot be rebuilt.
+//
+// This is the same check, one second into `go test`. It reads the workflow
+// rather than trusting a comment, because the comment was right and the
+// command below it was not.
+func TestTheReleaseStampsThisPackagesVersion(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Skipf("no release workflow to read here: %v", err)
+	}
+	wf := string(b)
+	const want = "-X github.com/go-pkgx/pkgx/internal/app.version="
+	if !strings.Contains(wf, want) {
+		t.Errorf("release.yml does not stamp %q — the binaries would print %q", want, version)
+	}
+	// And not the old one, which is the shape that fails silently.
+	if strings.Contains(wf, "-X main.version=") {
+		t.Error("release.yml still stamps main.version, a symbol neither main declares")
+	}
+	// Both binaries are built, or a release ships half of itself.
+	for _, pkg := range []string{`-o "$DIST/${out}" "$pkg"`, "./cmd/pkgs"} {
+		if !strings.Contains(wf, pkg) {
+			t.Errorf("release.yml does not look like it builds both binaries: %q is absent", pkg)
+		}
+	}
+}

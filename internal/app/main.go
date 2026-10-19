@@ -26,7 +26,18 @@ import (
 )
 
 // version is reported by `pkgx --version`. It defaults to "dev" and is
-// overridden at release-build time via -ldflags "-X main.version=<tag>".
+// overridden at release-build time via
+//
+//	-ldflags "-X github.com/go-pkgx/pkgx/internal/app.version=<tag>"
+//
+// ⛔ THE FULL IMPORT PATH, NOT `main.version`. This variable lived in
+// package main until the two binaries were split; the release workflow kept
+// stamping `main.version`, which now names a symbol neither main has, and
+// `-X` on an absent symbol is SILENT — the linker neither warns nor fails.
+// v0.22.0 built six correct binaries per tool, every one stamped v0.22.0 in
+// its build info, and every one printing "dev". The guard that compares the
+// PRINTED version against the tag is what caught it; the build-info check
+// could not, because the build info was right.
 var version = "dev"
 
 var usage = `pkgx ` + version + ` — pure-Go pkgx runtime

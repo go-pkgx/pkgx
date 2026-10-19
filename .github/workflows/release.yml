@@ -59,7 +59,7 @@ jobs:
       # {linux,darwin,windows} x {amd64,arm64} target, name the assets
       # pkgx-<os>-<arch> (windows: .exe), and record a SHA256SUMS manifest.
       # The release version (tag without the leading "v") is injected into
-      # main.version via -ldflags so `pkgx --version` matches the tag.
+      # internal/app.version via -ldflags so `--version` matches the tag.
       # ⛔ dist/ MUST NOT LIVE IN THE CHECKOUT. Go stamps the main module
       # from the work tree's VCS state, so the moment the first binary lands
       # in an untracked dist/ the tree is dirty and every LATER build in this
@@ -82,9 +82,13 @@ jobs:
           # every reader of `pkgs ls` with nothing to install, and the
           # install script offers the name.
           #
-          # The version is stamped into each main's OWN `version` symbol:
-          # they are two packages, and `-X main.version` reaches whichever
-          # one is being built.
+          # ⛔ THE SYMBOL IS internal/app.version, NOT main.version. Both
+          # binaries are three lines of main calling into internal/app, and
+          # that is where `version` lives. `-X` on a symbol that does not
+          # exist is SILENT — no warning, no error — so v0.22.0 produced
+          # twelve binaries stamped v0.22.0 in their build info, every one
+          # of them printing "dev". The printed-version check below is the
+          # only thing that saw it.
           for target in \
             linux/amd64 linux/arm64 \
             darwin/amd64 darwin/arm64 \
@@ -102,7 +106,9 @@ jobs:
               fi
               echo "building $out"
               CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-                go build -trimpath -ldflags="-s -w -X main.version=${TAG#v}" -o "$DIST/${out}" "$pkg"
+                go build -trimpath \
+                  -ldflags="-s -w -X github.com/go-pkgx/pkgx/internal/app.version=${TAG#v}" \
+                  -o "$DIST/${out}" "$pkg"
             done
           done
           cd "$DIST"
@@ -130,7 +136,7 @@ jobs:
             # that rebuilt main under a tag sailed through the +dirty test:
             # the binaries were CLEAN and stamped `v0.0.0-<date>-<sha>`.
             # The printed-version check passes there too, because
-            # `-X main.version=${TAG#v}` stamps the tag INPUT regardless of
+            # `-X …app.version=${TAG#v}` stamps the tag INPUT regardless of
             # what was compiled.
             if [ "$mod" != "$TAG" ]; then
               echo "::error::$name stamps $mod but this is $TAG — it was not built from the tag"
