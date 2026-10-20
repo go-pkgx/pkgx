@@ -787,6 +787,48 @@ the catalogue became a local file.
 The tool has its own tests, because a measuring tool nobody measures is how
 a plausible wrong number gets published.
 
+### ⛔ And nothing was keeping it true
+
+That measurement was taken by hand, once. `catbench` times the arms; it
+knows nothing about containers, and **no test and no lane had ever built a
+`FROM scratch` image or cut the network**. The first `net/http` on a
+completion path, or a lookup that falls back to the registry when a file is
+missing, passes every unit test in this repository and breaks the one
+property the catalogue, the name index and the browser were all built for.
+
+`go test ./scratch/` (with `PKGX_SCRATCH_TEST=1`, and in CI as *FROM
+scratch, offline*) builds the image — the two binaries, a real catalogue,
+nothing else: no shell, no libc, no CA bundle, no `/etc/resolv.conf` — and
+runs `ls`, `ls <namespace>`, `ls --tree`, `search`, `why`, `catalog`, the
+browser's no-TTY degradation and a tab completion in it with
+`--network none`.
+
+⛔ **Its planted positive is the point.** "Answered offline" and "I forgot
+to cut the network" are the same sentence, and `--network none` is one word
+away from being absent — so `pkgs catalog update`, the one command that
+must reach the registry, runs in the same configuration and has to **fail,
+about the network**:
+
+```
+control ok: catalog update refused as it must — pkgs: catalog update:
+resolve go-pkgx.dev/catalog v1: … dial udp 192.168.65.7:53: connect:
+network is unreachable
+```
+
+A binary that crashed for its own reasons would also be non-zero and would
+prove nothing, so the failure is matched against the ways this stack says
+it could not reach the network, and the whole test stops there if the
+control passes. Checked by mutation: dropping `--network none` fails the
+run at that line.
+
+Nothing in it is a timing gate — `docker run` on this image costs ~170 ms
+before the binary's first instruction, ten times what a completion is
+allowed, so a stopwatch there measures the runner and not pkgx. (A first
+draft of this check did exactly that and reported a completion of 188 ms
+against a 20 ms budget.) The timings are logged for a reader; what is
+asserted is that the answers arrive with no network to get them from. The
+numbers above remain the measurement.
+
 The price is that the index goes stale and nothing tells you by magic, so
 every command that reads it says how old it is, and `pkgs catalog` says it
 on its own:
