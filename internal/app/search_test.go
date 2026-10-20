@@ -121,6 +121,67 @@ func TestSearchSaysWhenTheCatalogueCannotAnswer(t *testing.T) {
 	}
 }
 
+// ⛔ THE REAL CASE, AND IT IS THE ONE WITH RESULTS.
+//
+// Measured 2026-10-20 against the published catalogue: `pkgs search json`
+// returns THIRTEEN projects and none of them is `stedolan.github.io/jq`. jq
+// is in that catalogue, with the command `jq` and a bottle for this
+// platform — the word "json" is simply in neither its path nor its
+// commands, and only 6 of 1938 projects carry a description for a search to
+// read. Thirteen answers read as a complete answer, so the reader concludes
+// jq is not packaged. A search that finds NOTHING already makes a reader
+// suspicious; one that finds plenty does not.
+func TestASearchWithResultsStillSaysWhatItCouldNotRead(t *testing.T) {
+	withCatalog(t, cmdCatalog(), nil)
+	var out, errb bytes.Buffer
+	if code := runSearch([]string{"rg"}, &out, &errb); code != 0 {
+		t.Fatalf("code=%d %s", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "carry a description") {
+		t.Errorf("a search WITH results says nothing about the prose it could not read: %q", errb.String())
+	}
+	// ⛔ ON STDERR. `pkgs search x > list` must write results and nothing
+	// else, or the note breaks every caller to make a point.
+	if strings.Contains(out.String(), "carry a description") {
+		t.Errorf("the note landed on stdout: %q", out.String())
+	}
+	// It names both numbers: "most of them" is not a fact a reader can act on.
+	for _, want := range []string{"only 0 of 4"} {
+		if !strings.Contains(errb.String(), want) {
+			t.Errorf("the note does not carry %q: %q", want, errb.String())
+		}
+	}
+
+	// ⛔ THE CONTROL: a catalogue that DOES describe its packages is silent.
+	// A warning printed every time is a warning nobody reads, and this one
+	// would otherwise outlive the condition it describes.
+	described := cmdCatalog()
+	for i := range described.Projects {
+		described.Projects[i].Summary = "a description of " + described.Projects[i].Project
+	}
+	withCatalog(t, described, nil)
+	out.Reset()
+	errb.Reset()
+	if code := runSearch([]string{"rg"}, &out, &errb); code != 0 {
+		t.Fatalf("code=%d %s", code, errb.String())
+	}
+	if strings.Contains(errb.String(), "carry a description") {
+		t.Errorf("a catalogue full of descriptions still warns about them: %q", errb.String())
+	}
+
+	// And the boundary is a share, not a count: one in five is enough.
+	some := cmdCatalog() // 4 projects
+	some.Projects[0].Summary = "one of four, which is above one in five"
+	withCatalog(t, some, nil)
+	errb.Reset()
+	if code := runSearch([]string{"rg"}, &bytes.Buffer{}, &errb); code != 0 {
+		t.Fatalf("code=%d %s", code, errb.String())
+	}
+	if strings.Contains(errb.String(), "carry a description") {
+		t.Errorf("1 of 4 described is above the floor and must be silent: %q", errb.String())
+	}
+}
+
 // A long result list is cut, and SAYS it was: a reader who sees twenty
 // lines and no more has no way to know whether the twenty-first was theirs.
 func TestSearchLimitsAndSaysSo(t *testing.T) {
