@@ -75,6 +75,41 @@ jobs:
       # is asking a question.
       - run: go tool cover -func=cov.out | tail -1
 
+  # ⛔ "WORKS OFFLINE IN AN IMAGE WITH NOTHING IN IT" HAD NEVER BEEN RUN.
+  # It is the property the catalogue, the name index and the browser were
+  # all built for, and it was a claim in a plan rather than a check. Done by
+  # hand on 2026-10-20 it held -- and a property measured once is a property
+  # that holds once: the first net/http on a completion path, or a lookup
+  # that falls back to the registry when a file is absent, passes every unit
+  # test in this repository and breaks this.
+  #
+  # The job builds a FROM scratch image holding the two binaries and a real
+  # catalogue, and runs every read-only verb in it with `--network none`.
+  # Its planted positive is `pkgs catalog update`, which MUST fail and must
+  # fail about the network: without it, "answered offline" and "I forgot to
+  # cut the network" are the same sentence.
+  #
+  # Nothing here is a timing gate. `docker run` on this image costs ~170 ms
+  # before the binary's first instruction -- ten times what a completion is
+  # allowed -- so a stopwatch would measure the runner. The timings are
+  # logged for a reader; what is asserted is that the answers arrive with no
+  # network to get them from.
+  scratch:
+    name: FROM scratch, offline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.2'
+      # The catalogue is fetched here, by the test, and that is the only
+      # step of it that touches the network: everything judged afterwards
+      # runs with none.
+      - name: go test ./scratch/
+        env:
+          PKGX_SCRATCH_TEST: '1'
+        run: go test -v -timeout 15m ./scratch/
+
   build:
     runs-on: ubuntu-latest
     strategy:
