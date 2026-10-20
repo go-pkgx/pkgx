@@ -530,6 +530,35 @@ earlier revision of this paragraph said "1907 recipes, 1592 declare" with
 neither, and by the time anyone compared, both numbers had changed and
 nothing said whether the difference was drift or a defect.
 
+⛔ **And the search says so, even when it finds plenty.** Measured
+2026-10-20, `pkgs search json` returns **thirteen** projects and none of
+them is `stedolan.github.io/jq` — jq is in that catalogue, with the command
+`jq` and a bottle for this platform, and the word "json" is in neither its
+path nor its commands. Thirteen answers read as a *complete* answer, so a
+reader concludes jq is not packaged. A search that finds nothing already
+makes a reader suspicious; one that finds plenty does not. So every search
+over a catalogue where fewer than one project in five carries a description
+ends with one line on **stderr**:
+
+```console
+$ pkgs search json
+github.com/zaach/jsonlint                jsonlint  1.6.0
+…
+pkgs: only 6 of 1938 projects here carry a description, so a word that is in
+neither a project's name nor a command it provides cannot reach it
+```
+
+On stderr, so `pkgs search x > list` still writes results and nothing else;
+and only below that floor, so a catalogue that one day carries descriptions
+goes quiet instead of nagging.
+
+The six are not ours to invent. Re-measured the same day over the upstream
+corpus, parsed as YAML rather than grepped — `description:` also appears
+inside build scripts and URLs there — **1928 recipes read, 259 with a
+`display-name`, 6 with a `summary` or `description`**, and the catalogue
+those recipes produce carries exactly those six. Nothing is lost between the
+recipe and the catalogue: the prose was never written.
+
 ### And the command runs, not just searches
 
 ```console

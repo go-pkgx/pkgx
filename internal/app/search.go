@@ -15,9 +15,19 @@ import (
 //
 // `nix search`, `guix search` and `spack list -s` all match a package's
 // description, and that is right for a collection that has descriptions.
-// This pantry does not: measured on its 1907 recipes, 1592 declare the
-// commands they provide and SIX carry a summary. A search over prose would
-// find six packages.
+// This pantry does not. Re-measured 2026-10-20 over the upstream corpus,
+// parsed as YAML rather than grepped (the word "description:" also appears
+// inside build scripts and URLs there):
+//
+//	1928  recipes read
+//	 259  carry a `display-name` — usually the project name recapitalised
+//	   6  carry a `summary` or a `description`      (0.3%)
+//
+// and in the catalogue those recipes produce, 1938 projects, 1608 with
+// commands and the SAME six summaries — so nothing is lost between the
+// recipe and the catalogue, and a search over prose can only ever find six
+// packages. (The earlier note here said 1907 and 1592; the corpus grew, the
+// six did not.)
 //
 // So the match is on names and on commands, and that turns out to be the
 // question people actually arrive with. `rg` is `crates.io/ripgrep`: no
@@ -58,6 +68,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 			// they are looking at.
 			fmt.Fprintln(stderr, pfx()+"this catalogue carries no command names — only project names were searched")
 		}
+		sayProseIsThin(cat, stderr)
 		return 1
 	}
 
@@ -71,7 +82,46 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	if len(shown) < len(hits) {
 		fmt.Fprintf(stderr, "%s%d more; %s search -n 0 %s\n", pfx(), len(hits)-len(shown), tool, query)
 	}
+	sayProseIsThin(cat, stderr)
 	return 0
+}
+
+// proseFloor is the share of projects that must carry a description before
+// the catalogue is treated as searchable by prose: one in five.
+const proseFloor = 5
+
+// sayProseIsThin tells the reader what the search could NOT look at.
+//
+// ⛔ IT IS SAID WHEN THERE *ARE* RESULTS, which is the whole point. A search
+// that answers nothing already makes the reader suspicious; a search that
+// answers THIRTEEN THINGS reads as a complete answer. Measured 2026-10-20 on
+// the published catalogue, `search json` returns 13 projects and none of
+// them is `stedolan.github.io/jq` — jq IS there, with the command `jq` and a
+// bottle, and the word "json" appears in neither its path nor its commands.
+// Nothing in that output suggests jq exists, so the reader concludes it is
+// not packaged. That is the quietest kind of wrong answer, and one line of
+// stderr is the whole fix.
+//
+// On stderr, so `pkgs search x > list` still writes only results; and only
+// when the catalogue really is thin, so a future one with descriptions is
+// silent rather than nagging.
+func sayProseIsThin(cat bottle.Catalog, stderr io.Writer) {
+	with, total := proseCoverage(cat)
+	if total == 0 || with*proseFloor >= total {
+		return
+	}
+	fmt.Fprintf(stderr, "%sonly %d of %d projects here carry a description, so a word that is in neither a project's name nor a command it provides cannot reach it\n",
+		pfx(), with, total)
+}
+
+func proseCoverage(cat bottle.Catalog) (with, total int) {
+	for _, p := range cat.Projects {
+		total++
+		if strings.TrimSpace(p.Summary) != "" {
+			with++
+		}
+	}
+	return with, total
 }
 
 // searchNote says WHY a result is on the page, and what you would get.
