@@ -85,6 +85,10 @@ usage:
   pkgs catalog reindex               rebuild the name index <TAB> reads from
                                      the catalogue already on disk, with NO
                                      network — for an image that ships one
+  pkgs catalog platforms             which platforms the registry publishes a
+                                     catalogue for, one per line, ready to hand
+                                     back to --platform. Asks the registry: no
+                                     local file knows what EXISTS
   pkgs store [--by-size] [-n N]      what the bottle store holds: every version
                                      an ephemeral run ever pulled, and its
                                      size. Reports and deletes NOTHING
