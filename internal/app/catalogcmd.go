@@ -50,9 +50,40 @@ func runCatalogCmd(args []string, stdout, stderr io.Writer) int {
 		return catalogUpdate(osn, arch, stdout, stderr)
 	case len(args) == 1 && args[0] == "reindex":
 		return catalogReindex(stdout, stderr)
+	case len(args) == 1 && args[0] == "platforms":
+		return catalogPlatforms(stdout, stderr)
 	}
-	fmt.Fprintln(stderr, pfx()+"usage: "+tool+" catalog [update [--platform os/arch]|reindex]")
+	fmt.Fprintln(stderr, pfx()+"usage: "+tool+" catalog [update [--platform os/arch]|reindex|platforms]")
 	return 2
+}
+
+// catalogPlatforms prints the platforms the registry publishes a catalogue
+// for, one per line, ready to be handed straight back to `--platform`.
+//
+// # WHY
+//
+// ⛔ A CALLER COULD ASK "IS THIS ONE PUBLISHED", ONE GUESS AT A TIME, AND
+// NOT "WHICH ARE". Measured 2026-10-20: go-pkgx/packages' daily CVE scan
+// carried its platform list in the workflow file, the list said two, and
+// the registry publishes six. The four nobody asked about were clean, so
+// the cost was coverage rather than an exposure — but a list copied into a
+// file freezes while the population grows, and the next platform would be
+// missed the same way.
+//
+// It is the ONE read in this verb besides `update` that talks to the
+// registry, and the only one that cannot work offline: what is being asked
+// is what the registry holds, which no local file knows. `catalog` reports
+// what is on disk; this reports what exists.
+func catalogPlatforms(stdout, stderr io.Writer) int {
+	plats, err := fetchPlatforms()
+	if err != nil {
+		fmt.Fprintf(stderr, pfx()+"catalog platforms: %v\n", err)
+		return 1
+	}
+	for _, p := range plats {
+		fmt.Fprintln(stdout, p)
+	}
+	return 0
 }
 
 // catalogReindex rebuilds the completion name index from the catalogue
@@ -235,5 +266,13 @@ var (
 			return bottle.Catalog{}, err
 		}
 		return bottle.FetchCatalog(c, osn, arch)
+	}
+
+	fetchPlatforms = func() ([]string, error) {
+		c, err := bottle.NewOCIClient(bottle.DistBase)
+		if err != nil {
+			return nil, err
+		}
+		return c.Platforms(bottle.CatalogProjectName, bottle.CatalogVersion)
 	}
 )
