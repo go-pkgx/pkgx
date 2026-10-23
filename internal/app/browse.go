@@ -546,6 +546,7 @@ var subcommandCompletions = []completion{
 	{"ls", "what is available under a node"},
 	{"catalog", "which catalogue is here; `catalog update` fetches one"},
 	{"search", "find a package by name or by a command it provides"},
+	{"request", "a report you can open as an issue when a package is missing"},
 	{"why", "the shortest path by which one project needs another"},
 	{"store", "what this disk holds, and how much of it"},
 	{"browse", "walk the tree full-screen"},

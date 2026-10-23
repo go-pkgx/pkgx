@@ -86,6 +86,9 @@ asking ABOUT packages is pkgs, a separate command:
   pkgs search [-n N] <text>          find a package by name or by a command it
                                      provides
   pkgs browse [node]                 walk the tree full-screen
+  pkgs request [--url] <project>     a package is missing: what the registry
+                                     has, as a report you can open as an
+                                     issue. Sends nothing by itself
   pkgs catalog [update|reindex]      which catalogue is here; update fetches
                                      one, and takes --platform os/arch
   pkgs store [--by-size] [--root …]  what this disk holds, and what it is for

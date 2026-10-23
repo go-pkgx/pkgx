@@ -505,6 +505,57 @@ the tree and exits**: `pkgs browse | less`, a CI log and a scratch image are
 the same case, and a command that refuses to work when its output is a pipe
 is one people stop putting in scripts.
 
+## When it is not here at all
+
+```console
+$ pkgs request opendev.org/openstack/python-openstackclient
+project   opendev.org/openstack/python-openstackclient
+platform  darwin/aarch64
+pkgs      0.24.0
+state     never published in this registry, for any platform
+
+Nothing was sent. `pkgs request --url …` prints a link that opens this as an issue.
+```
+
+The line that prompted it, from a user on 2026-10-22:
+
+```console
+$ pkgx openstack user list --domain stratuslab
+pkgx: opendev.org/openstack/python-openstackclient is not published in
+      ghcr.io/go-pkgx/packages/… : response status code 403: denied
+```
+
+Two problems in one line. The **403 is ghcr saying "no such repository"** and
+reads as a permissions fault; and the person now has to work out by hand
+whether the package is missing everywhere or only for their platform, and
+then where to ask. `request` answers both from the registry — *never
+published*, *published for other platforms but not yours*, or *already here*,
+which it **refuses** to file, since an issue with a false premise spends a
+maintainer's trust.
+
+⛔ **And look at what else that line contains: `--domain stratuslab`.** A
+reporter that attached "the command that failed" would publish an
+organisation's infrastructure names into a public tracker, from a machine
+whose owner was debugging rather than publishing. So the payload is a fixed
+list of fields — project, platform, tool version, state — assembled in one
+function that **does not import `os`**, so it cannot reach argv or the
+environment even by accident. A test asserts the report and the prefilled
+issue body carry no argv, no environment and no paths, and the mutation that
+adds the store path to the report is caught.
+
+It sends nothing. `--url` prints a link you read first; there is no flag that
+posts, and nothing to configure or forget.
+
+⛔ Its first three live runs each found a defect in **itself**, and all three
+had one shape: a rule `bottle` already owned, tested, and did not export, so
+this caller wrote a worse one. It counted `sha256-…` attestation tags as
+versions (`IsVersionTag`, bottle v0.50.0); and it reprinted ghcr's raw 403
+instead of reporting an absence (`IsNotPublished`, bottle v0.51.0 — which
+also stopped that predicate panicking on `nil`, a trap only exporting
+creates). Chasing the first led to a third: `tagSpellings` offered `26.8.0`
+as a spelling of `26.8.1`, which is why the linux/x86-64 catalogue
+advertised a `nodejs.org` nobody could install.
+
 ## You know the command, not the package
 
 ```console
