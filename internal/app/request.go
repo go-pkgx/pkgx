@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"sort"
 	"strings"
 
 	"github.com/go-pkgx/bottle"
@@ -171,27 +170,35 @@ func gatherRequest(project string) (requestFacts, error) {
 		// missing.
 		return f, fmt.Errorf("asking the registry about %s: %w", project, err)
 	}
-	// ⛔ bottle.IsVersionTag, NOT "anything that is not a platform tag".
-	// ghcr implements no referrers API, so ORAS keeps each bottle's
-	// attestations under a fallback tag named `sha256-<digest>`, and those
-	// sit in the same listing. The first live run of this command filtered
-	// with IsPlatformTag alone and reported a project with no releases as
-	// "2 version(s) tagged" — the two being referrers. bottle owns that
-	// rule and had tested it; it was unexported until go-pkgx/bottle#155,
-	// and a second copy here is how two answers to one question begin.
-	var vers []string
-	for _, t := range tags {
-		if bottle.IsVersionTag(t) {
-			vers = append(vers, t)
-		}
-	}
+	// ⛔ bottle.VersionsFromTags, NOT a filter and a sort written here.
+	// This went through three versions, and each one was wrong in a way
+	// only the registry could show:
+	//
+	//  1. IsPlatformTag alone — ghcr has no referrers API, so ORAS parks
+	//     attestations under `sha256-<digest>` in the same listing, and a
+	//     project with no releases was reported as "2 version(s) tagged".
+	//  2. bottle.IsVersionTag + sort.Strings — which is TEXT order, so
+	//     "26.8.1" beat "26.12.1" and this command said nodejs.org was
+	//     published "at 26.8.1" an hour after 26.12.1 went up. Not just
+	//     the number: the platform list under it was read off the wrong
+	//     version's index.
+	//  3. this.
+	//
+	// VersionsFromTags (bottle v0.54.0) is the call ociVersionsFor has
+	// always made. It orders numerically, drops tags flavoured for another
+	// glibc — which IsVersionTag accepts — and folds "1.0.0", "v1.0.0" and
+	// "1.0" into one version, which our registry really does carry.
+	vers := bottle.VersionsFromTags(tags)
 	f.versions = len(vers)
 	if len(vers) == 0 {
 		return f, nil // never published here, for anyone
 	}
-	sort.Strings(vers)
-	newest := vers[len(vers)-1]
-	f.newest = newest
+	// ⛔ RegistryTag, not Raw: a flavoured bottle's version is "2.44" and
+	// its tag is "2.44-glibc2.27.0", and asking the index for the former
+	// answers "platform not in index" — which this command would print as
+	// a measured absence.
+	newest := vers[len(vers)-1].RegistryTag()
+	f.newest = vers[len(vers)-1].Raw
 	// ⛔ "THE INDEX WOULD NOT SAY" IS ITS OWN STATE. The first live run of
 	// this command printed "2 version(s) published, none this platform can
 	// use" for a package whose index simply had not been written yet — a
@@ -239,7 +246,13 @@ func (f requestFacts) report() string {
 		fmt.Fprintf(&b, "          platforms they are for: %s\n", f.indexErr)
 		fmt.Fprintf(&b, "          (that is a failed lookup, not a measured absence)\n")
 	case len(f.elsewhere) > 0:
-		fmt.Fprintf(&b, "state     published for %s, NOT for %s\n", strings.Join(f.elsewhere, " "), f.platform)
+		// ⛔ AND THIS LINE NAMES ITS VERSION TOO. Every state here is about
+		// the NEWEST version, and saying so matters most in this one: an
+		// older version may well be installable here, so "NOT for
+		// darwin/aarch64" without a number reads as "you cannot have this
+		// package" when it means "you cannot have 26.12.1". Measured live
+		// on nodejs.org the moment the ordering was fixed.
+		fmt.Fprintf(&b, "state     %s published for %s, NOT for %s\n", f.newest, strings.Join(f.elsewhere, " "), f.platform)
 	default:
 		fmt.Fprintf(&b, "state     %d version(s) published, none this platform can use\n", f.versions)
 	}
