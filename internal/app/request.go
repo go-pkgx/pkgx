@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -108,20 +107,26 @@ func runRequest(args []string, stdout, stderr io.Writer) int {
 //
 // where the package was published and the COMMAND was missing. A hint that
 // appears on unrelated failures teaches people to ignore hints.
-// *bottle.NotPublishedError (bottle v0.52.0) cannot be matched by accident
-// and carries the project, so the line names what to ask for instead of
-// printing a placeholder and hoping the reader fills it in.
+//
+// ⛔ AND IT ASKS ONE QUESTION, BECAUSE THE FIRST VERSION ANSWERED HALF OF
+// IT. *bottle.NotPublishedError alone means "the registry has no such
+// repository" — a brand-new package, the RARE case. The ordinary one is a
+// recipe with no bottle for your platform: 567 of 1940 projects in the
+// published darwin/aarch64 catalogue on 2026-10-23, against which v0.25.0
+// shipped a hint that could not fire. bottle.ProjectToRequest (v0.53.0)
+// answers both and names the project, so this stays one call; two
+// predicates here is exactly how the second one came to be forgotten.
 //
 // Nothing else earns a hint: a build that failed, a signature that did not
 // verify and a registry having a bad day are not things to ask somebody to
 // publish.
 func sayHowToAsk(err error, stderr io.Writer) {
-	var np *bottle.NotPublishedError
-	if !errors.As(err, &np) {
+	project := bottle.ProjectToRequest(err)
+	if project == "" {
 		return
 	}
 	fmt.Fprintf(stderr, "%sif it should be here: `%s request %s` prints a report you can open as an issue (it sends nothing)\n",
-		pfx(), pkgsTool, np.Project)
+		pfx(), pkgsTool, project)
 }
 
 // pkgsTool is the sibling binary's name. `tool` is whichever of the two is

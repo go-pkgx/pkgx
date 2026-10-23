@@ -112,3 +112,59 @@ func TestItCountsABareProjectName(t *testing.T) {
 		t.Errorf("a project named %q was not counted as bare:\n%s", "notadomain", out)
 	}
 }
+
+// ⛔ A PERCENTAGE IS NOT A WORK LIST, and the two counts must agree. The
+// fixture's `example.com` carries a PLATFORM and no version — the pair that
+// makes "has a bottle" and "is named for this platform" different questions
+// — so a -missing that listed by platform instead of by version would print
+// one name here and say two.
+func TestMissingNamesWhatTheCountLeavesAnonymous(t *testing.T) {
+	var b strings.Builder
+	if err := listMissing(&b, write(t, published), 0); err != nil {
+		t.Fatalf("listMissing: %v", err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "2 of 4 project(s) have no bottle here") {
+		t.Errorf("the tally does not match the census:\n%s", out)
+	}
+	for _, want := range []string{"langchain.com", "example.com"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q from:\n%s", want, out)
+		}
+	}
+	// And the bottled ones are NOT in the work list. Without this the test
+	// passes against a version that prints every project.
+	for _, unwanted := range []string{"abseil.io", "stedolan.github.io/jq"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("%q has a bottle and was listed as missing:\n%s", unwanted, out)
+		}
+	}
+}
+
+// -n bounds the output without lying about the total: a truncated list that
+// did not say so would be read as the whole of the work.
+func TestTheCapSaysItIsOne(t *testing.T) {
+	var b strings.Builder
+	if err := listMissing(&b, write(t, published), 1); err != nil {
+		t.Fatalf("listMissing: %v", err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "2 of 4 project(s) have no bottle here") {
+		t.Errorf("the total changed with the cap:\n%s", out)
+	}
+	if !strings.Contains(out, "… 1 more") {
+		t.Errorf("the cap did not announce itself:\n%s", out)
+	}
+}
+
+// An empty or unreadable catalogue must refuse here too. An empty WORK LIST
+// reads as "nothing to do", which is the most expensive thing this file
+// could get wrong.
+func TestAnEmptyCatalogueIsNotAnEmptyWorkList(t *testing.T) {
+	if err := listMissing(&strings.Builder{}, write(t, `{"generated":"2026-10-06T15:04:06Z","projects":[]}`), 0); err == nil {
+		t.Fatal("an empty catalogue produced an empty work list instead of an error")
+	}
+	if err := listMissing(&strings.Builder{}, filepath.Join(t.TempDir(), "absent.json"), 0); err == nil {
+		t.Fatal("a missing file produced an empty work list instead of an error")
+	}
+}
