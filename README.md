@@ -579,12 +579,33 @@ pkgx: command not found in the requested packages: true
 
 where the package was published and the **command** was missing. A hint that
 turns up on unrelated failures teaches people to ignore hints, so the trigger
-is `*bottle.NotPublishedError` (bottle v0.52.0): it cannot be matched by
-accident and it carries the project, so the line names what to ask for
-instead of printing a placeholder. A build that failed, a signature that did
-not verify and a registry having a bad day get no hint — none of them is
-something to ask a maintainer to publish. The cost of that choice is a missed
-hint, never a wrong one.
+is a type, and it carries the project: the line names what to ask for instead
+of printing a placeholder.
+
+⛔ **And it asks one question, because the first version answered half of
+one.** `*bottle.NotPublishedError` means the registry has no such repository
+— a brand-new package, and the **rare** case. The ordinary one is a recipe
+with no bottle for *your* platform: measured against the published
+`darwin/aarch64` catalogue on 2026-10-23, **567 of 1940 projects**, against
+which `v0.25.0` shipped a hint that could not fire:
+
+```console
+$ pkgx +aerc-mail.org -- echo ok
+pkgx: no version of aerc-mail.org is published for darwin/aarch64 (available: 0.22.0; not published here: 0.22.0)
+```
+
+Both states are types now, and `bottle.ProjectToRequest` answers both in one
+call — two predicates at this call site is exactly how the second came to be
+forgotten. `pkgs ls` can name the 567 for a platform
+(`go run ./internal/catstat -missing <catalogue.json>`), which is how that
+example was chosen: from a list the catalogue derived, not from one already
+believed in.
+
+A build that failed, a signature that did not verify and a registry having a
+bad day get no hint — none of them is something to ask a maintainer to
+publish. A bare registry 404 gets none either: it *is* an absence, but it
+names no project, and `pkgs request <project>` is not an instruction. The cost
+of that choice is a missed hint, never a wrong one.
 
 ## You know the command, not the package
 

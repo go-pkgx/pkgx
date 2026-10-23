@@ -30,6 +30,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -40,13 +41,25 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: catstat <catalogue.json>...")
+	fs := flag.NewFlagSet("catstat", flag.ContinueOnError)
+	missing := fs.Bool("missing", false, "name the projects with no bottle on this platform, instead of counting them")
+	limit := fs.Int("n", 40, "with -missing, how many names to print (0 prints them all)")
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		os.Exit(2)
+	}
+	if fs.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "usage: catstat [-missing [-n N]] <catalogue.json>...")
 		os.Exit(2)
 	}
 	status := 0
-	for _, path := range os.Args[1:] {
-		if err := report(os.Stdout, path); err != nil {
+	for _, path := range fs.Args() {
+		var err error
+		if *missing {
+			err = listMissing(os.Stdout, path, *limit)
+		} else {
+			err = report(os.Stdout, path)
+		}
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "catstat:", err)
 			status = 1
 		}
@@ -54,22 +67,71 @@ func main() {
 	os.Exit(status)
 }
 
-func report(w io.Writer, path string) error {
-	b, err := os.ReadFile(path)
+// listMissing names what the count leaves anonymous.
+//
+// ⛔ A PERCENTAGE IS NOT A WORK LIST. "with a bottle 1373 (70.8%)" says 567
+// projects on darwin/aarch64 have a recipe and nothing to install, and that
+// number cannot be acted on: nobody can file, build or triage a percentage.
+// The names are already in the file, so this is a read, not a sweep — no
+// registry call, no guess at which of 1940 projects to probe.
+//
+// It is also the only honest way to pick an example of the state. Choosing
+// one by hand means choosing one I already believe in, and the last three
+// times I did that in this repository the belief was out of date.
+func listMissing(w io.Writer, path string, limit int) error {
+	c, err := readCatalog(path)
 	if err != nil {
 		return err
 	}
+	var names []string
+	for _, p := range c.Projects {
+		if len(p.Versions) == 0 {
+			names = append(names, p.Project)
+		}
+	}
+	sort.Strings(names)
+	shown := names
+	if limit > 0 && len(shown) > limit {
+		shown = shown[:limit]
+	}
+	fmt.Fprintf(w, "%s\n", path)
+	fmt.Fprintf(w, "  %d of %d project(s) have no bottle here\n", len(names), len(c.Projects))
+	for _, n := range shown {
+		fmt.Fprintf(w, "  %s\n", n)
+	}
+	if len(shown) < len(names) {
+		fmt.Fprintf(w, "  … %d more (-n 0 for all)\n", len(names)-len(shown))
+	}
+	return nil
+}
+
+// readCatalog is the one door both reports come through, so a catalogue that
+// is empty or will not parse is refused once rather than in each of them.
+func readCatalog(path string) (bottle.Catalog, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return bottle.Catalog{}, err
+	}
 	c, err := bottle.UnmarshalCatalog(b)
 	if err != nil {
-		return fmt.Errorf("%s: %w", path, err)
+		return bottle.Catalog{}, fmt.Errorf("%s: %w", path, err)
 	}
-	n := len(c.Projects)
-	if n == 0 {
+	if len(c.Projects) == 0 {
 		// A catalogue with no projects is not a census of nothing, it is a
 		// broken file, and every percentage below would be a division by
-		// zero dressed up as a finding.
-		return fmt.Errorf("%s: no projects", path)
+		// zero dressed up as a finding — or, for -missing, an empty work
+		// list that reads as "nothing to do".
+		return bottle.Catalog{}, fmt.Errorf("%s: no projects", path)
 	}
+	return c, nil
+}
+
+func report(w io.Writer, path string) error {
+	c, err := readCatalog(path)
+	if err != nil {
+		return err
+	}
+	n := len(c.Projects)
 	// bareNames are project names with neither a dot nor a slash in them.
 	//
 	// Counted because a decision rests on it: `pkgx <command>` resolves a

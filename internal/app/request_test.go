@@ -247,7 +247,30 @@ func TestTheHintAppearsOnlyForAPackageThatIsNotHere(t *testing.T) {
 		Err: errors.New("403: denied"),
 	}
 
+	// ⛔ THE CASE THE FIRST VERSION OF THIS TEST COULD NOT SEE. It pinned
+	// the mechanism — a type, matched through a wrap — and passed, while
+	// the shipped binary stayed silent for 567 of the 1940 projects in the
+	// darwin/aarch64 catalogue. Those are the ones with a recipe and no
+	// bottle HERE, which is a different error from "no such repository",
+	// and the hint only knew the second. Measured 2026-10-23 by running
+	// pkgx v0.25.0 against a name taken from `catstat -missing`, not from
+	// an example I already believed in:
+	//
+	//	$ pkgx +aerc-mail.org -- echo ok
+	//	pkgx: no version of aerc-mail.org is published for darwin/aarch64
+	//	      (available: 0.22.0; not published here: 0.22.0)
+	//
+	// A good sentence, and a dead end.
 	var b bytes.Buffer
+	sayHowToAsk(&bottle.NoBottleHereError{
+		Project: "aerc-mail.org", OS: "darwin", Arch: "aarch64",
+		Available: []bottle.Ver{bottle.ParseVer("0.22.0")}, Absent: []string{"0.22.0"},
+	}, &b)
+	if !strings.Contains(b.String(), "pkgs request aerc-mail.org") {
+		t.Errorf("the COMMON absence gets no hint: %q", b.String())
+	}
+
+	b.Reset()
 	// ⛔ Wrapped, because the error a user sees has been through resolution
 	// before it reaches the printer.
 	sayHowToAsk(fmt.Errorf("resolving: %w", absent), &b)
