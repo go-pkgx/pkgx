@@ -142,7 +142,12 @@ func TestTheThreeStates(t *testing.T) {
 			"sha256-5e3e8dd10513699116134fe1455e53db8d7d6b575a25d539bac524fc920c12b9",
 		}}, "never published in this registry"},
 		{"not for this platform", fakeOCI{tags: []string{"1.0.0"}, plats: []string{elsewhereThan(host)}}, "NOT for " + host},
-		{"published here", fakeOCI{tags: []string{"1.0.0"}, plats: []string{host}}, "published for this platform"},
+		// ⛔ AND IT SAYS WHICH VERSION. "published for this platform" is true
+		// and answers a question nobody asked: measured on myself the day
+		// after shipping this, checking whether a rebuild closing six
+		// advisories had landed, I got that line and went to the registry by
+		// hand for a fact this command already held.
+		{"published here", fakeOCI{tags: []string{"1.0.0"}, plats: []string{host}}, "published for " + host + " at 1.0.0"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			withOCI(t, c.oci)
@@ -152,6 +157,37 @@ func TestTheThreeStates(t *testing.T) {
 				t.Errorf("state not reported as %q:\n%s", c.want, out.String())
 			}
 		})
+	}
+}
+
+// ⛔ A ROLLOUT IS PER PLATFORM, so "here" is half the answer. Somebody
+// checking whether a rebuild has reached everywhere needs the other
+// platforms on the same line, and this command already knows them — it
+// computes `elsewhere` for every state and printed it in only one.
+func TestPublishedHereAlsoSaysWhereElse(t *testing.T) {
+	host := hostPlatform()
+	other := elsewhereThan(host)
+	withOCI(t, fakeOCI{tags: []string{"8.3.5"}, plats: []string{host, other}})
+	var out, errb bytes.Buffer
+	runRequest([]string{"vitejs.dev"}, &out, &errb)
+	if !strings.Contains(out.String(), "published for "+host+" at 8.3.5") {
+		t.Errorf("the version is missing:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "also "+other) {
+		t.Errorf("the other platform is missing:\n%s", out.String())
+	}
+	// And the refusal on stderr names the version too: that is the line a
+	// person reads when they expected a request to be possible.
+	if !strings.Contains(errb.String(), "vitejs.dev 8.3.5 is published") {
+		t.Errorf("the refusal does not name the version: %q", errb.String())
+	}
+	// With nothing elsewhere, there is no empty "also" line to puzzle over.
+	withOCI(t, fakeOCI{tags: []string{"8.3.5"}, plats: []string{host}})
+	out.Reset()
+	errb.Reset()
+	runRequest([]string{"vitejs.dev"}, &out, &errb)
+	if strings.Contains(out.String(), "also") {
+		t.Errorf("an empty `also` was printed:\n%s", out.String())
 	}
 }
 

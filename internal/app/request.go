@@ -76,7 +76,7 @@ func runRequest(args []string, stdout, stderr io.Writer) int {
 		// ⛔ A request for something that is already here is the one answer
 		// this must refuse to help with: it would file an issue whose
 		// premise is false, and the next one would be trusted less.
-		fmt.Fprintf(stderr, pfx()+"nothing to request: %s is published for %s\n", project, hostPlatform())
+		fmt.Fprintf(stderr, pfx()+"nothing to request: %s %s is published for %s\n", project, f.newest, hostPlatform())
 		return 1
 	}
 	if wantURL {
@@ -143,6 +143,7 @@ type requestFacts struct {
 	platform  string // the host, in pkgx's spelling
 	version   string // this tool's version
 	published bool   // already here for this platform
+	newest    string // the newest version tagged, whoever can use it
 	elsewhere []string
 	versions  int
 	indexErr  string // the index would not say which platforms: NOT an absence
@@ -190,6 +191,7 @@ func gatherRequest(project string) (requestFacts, error) {
 	}
 	sort.Strings(vers)
 	newest := vers[len(vers)-1]
+	f.newest = newest
 	// ⛔ "THE INDEX WOULD NOT SAY" IS ITS OWN STATE. The first live run of
 	// this command printed "2 version(s) published, none this platform can
 	// use" for a package whose index simply had not been written yet — a
@@ -218,7 +220,20 @@ func (f requestFacts) report() string {
 	case f.versions == 0:
 		fmt.Fprintf(&b, "state     never published in this registry, for any platform\n")
 	case f.published:
-		fmt.Fprintf(&b, "state     published for this platform\n")
+		// ⛔ "PUBLISHED FOR THIS PLATFORM" ANSWERS A QUESTION NOBODY ASKED.
+		// Measured on myself, 2026-10-23: having rebuilt vitejs.dev to close
+		// six advisories, I ran `pkgs request vitejs.dev` to check the
+		// remedy had landed and got exactly that line — true, and silent
+		// about the one thing I needed, WHICH VERSION. I went to the
+		// registry by hand for a fact this command already held.
+		//
+		// The other platforms go on the same line for the same reason: a
+		// rebuild lands per platform, so "here, and also there" is the
+		// shape of the answer somebody checking a rollout wants.
+		fmt.Fprintf(&b, "state     published for %s at %s\n", f.platform, f.newest)
+		if len(f.elsewhere) > 0 {
+			fmt.Fprintf(&b, "          also %s\n", strings.Join(f.elsewhere, " "))
+		}
 	case f.indexErr != "":
 		fmt.Fprintf(&b, "state     %d version(s) tagged, and the index would not say which\n", f.versions)
 		fmt.Fprintf(&b, "          platforms they are for: %s\n", f.indexErr)
