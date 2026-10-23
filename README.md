@@ -556,6 +556,36 @@ creates). Chasing the first led to a third: `tagSpellings` offered `26.8.0`
 as a spelling of `26.8.1`, which is why the linux/x86-64 catalogue
 advertised a `nodejs.org` nobody could install.
 
+### The dead end now names its exit
+
+The command above only helps somebody who already knows it exists. The person
+who met the 403 did not, so the failure itself says where to go — and only
+that failure:
+
+```console
+$ pkgx openstack user list --domain stratuslab
+pkgx: opendev.org/openstack/python-openstackclient is not published in …
+pkgx: if it should be here: `pkgs request opendev.org/openstack/python-openstackclient`
+      prints a report you can open as an issue (it sends nothing)
+```
+
+⛔ **It matches a type, not a sentence.** The first version asked
+`bottle.IsNotPublished`, whose last resort reads the error's *text*, and its
+first live run fired on
+
+```console
+pkgx: command not found in the requested packages: true
+```
+
+where the package was published and the **command** was missing. A hint that
+turns up on unrelated failures teaches people to ignore hints, so the trigger
+is `*bottle.NotPublishedError` (bottle v0.52.0): it cannot be matched by
+accident and it carries the project, so the line names what to ask for
+instead of printing a placeholder. A build that failed, a signature that did
+not verify and a registry having a bad day get no hint — none of them is
+something to ask a maintainer to publish. The cost of that choice is a missed
+hint, never a wrong one.
+
 ## You know the command, not the package
 
 ```console

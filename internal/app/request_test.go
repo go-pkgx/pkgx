@@ -3,11 +3,13 @@ package app
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/go-pkgx/bottle"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 )
 
@@ -231,6 +233,61 @@ func TestGhcrsRefusalForAnAbsentRepositoryIsAnAbsence(t *testing.T) {
 	}
 	if strings.Contains(errb.String(), "denied") || strings.Contains(errb.String(), "403") {
 		t.Errorf("the registry's raw refusal reached the user: %q", errb.String())
+	}
+}
+
+// ⛔ THE DEAD END IS THE DEFECT: a 403 that names no next step. The hint
+// appears when the package is simply not here, and NOT when something
+// actually went wrong — a build that failed or a registry having a bad day
+// are not things to ask somebody to publish.
+func TestTheHintAppearsOnlyForAPackageThatIsNotHere(t *testing.T) {
+	const project = "opendev.org/openstack/python-openstackclient"
+	absent := &bottle.NotPublishedError{
+		Project: project, Registry: "ghcr.io", Repo: "go-pkgx/packages/…",
+		Err: errors.New("403: denied"),
+	}
+
+	var b bytes.Buffer
+	// ⛔ Wrapped, because the error a user sees has been through resolution
+	// before it reaches the printer.
+	sayHowToAsk(fmt.Errorf("resolving: %w", absent), &b)
+	// ⛔ AND IT NAMES THE PROJECT. The word a person types is a COMMAND —
+	// `openstack` — while the project is the long path; the typed error is
+	// the only thing that knows which, so the hint is an instruction rather
+	// than a shape to fill in.
+	if !strings.Contains(b.String(), "pkgs request "+project) {
+		t.Errorf("the hint does not name the project to ask for: %q", b.String())
+	}
+	if !strings.Contains(b.String(), "sends nothing") {
+		t.Errorf("the hint does not say it sends nothing: %q", b.String())
+	}
+
+	// ⛔ THE FALSE POSITIVE THAT MADE THIS MATCH A TYPE. Its first live run
+	// fired on this exact sentence, where the package was published and the
+	// COMMAND was missing — bottle's prose fallback matched "not found".
+	// A hint that appears on unrelated failures teaches people to ignore
+	// hints.
+	//
+	// ⛔ AND THE 404 IS HERE ON PURPOSE, labelled for what it is: a bare
+	// registry 404 DOES mean the repository is absent, and it still gets no
+	// hint, because it names no project and a hint that says
+	// `pkgs request <project>` is not an instruction. bottle wraps the
+	// absences it resolves in *NotPublishedError; one arriving bare is a
+	// path that has not been given a project yet, and silence is the honest
+	// answer until it is. The cost of this choice is a missed hint, never a
+	// wrong one.
+	for _, noHint := range []error{
+		errors.New("command not found in the requested packages: true"),
+		errors.New("build failed: exit status 127"),
+		&errcode.ErrorResponse{StatusCode: http.StatusNotFound}, // absent, but nameless
+		&errcode.ErrorResponse{StatusCode: http.StatusInternalServerError},
+		errors.New("dial tcp: connection reset by peer"),
+	} {
+		b.Reset()
+		sayHowToAsk(noHint, &b)
+		if b.Len() != 0 {
+			t.Errorf("hinted at a package request for %v: %q", noHint, b.String())
+		}
 	}
 }
 
