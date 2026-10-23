@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -86,6 +87,47 @@ func runRequest(args []string, stdout, stderr io.Writer) int {
 	}
 	return 0
 }
+
+// sayHowToAsk points at `pkgs request` when a run failed because the
+// package is simply not here.
+//
+// ⛔ THE DEAD END IS THE DEFECT. The user who prompted this ran
+//
+//	pkgx openstack user list --domain stratuslab
+//
+// and got ghcr's 403, which names no next step and reads as a permissions
+// fault. The package existed in the pantry and we had never built it — a
+// five-minute fix for whoever runs the factory, and nothing in the output
+// said so or where to say it.
+//
+// ⛔ IT MATCHES A TYPE, NOT A SENTENCE. The first version asked
+// bottle.IsNotPublished, whose last resort reads the error's TEXT — and
+// its first live run fired on
+//
+//	pkgx: command not found in the requested packages: true
+//
+// where the package was published and the COMMAND was missing. A hint that
+// appears on unrelated failures teaches people to ignore hints.
+// *bottle.NotPublishedError (bottle v0.52.0) cannot be matched by accident
+// and carries the project, so the line names what to ask for instead of
+// printing a placeholder and hoping the reader fills it in.
+//
+// Nothing else earns a hint: a build that failed, a signature that did not
+// verify and a registry having a bad day are not things to ask somebody to
+// publish.
+func sayHowToAsk(err error, stderr io.Writer) {
+	var np *bottle.NotPublishedError
+	if !errors.As(err, &np) {
+		return
+	}
+	fmt.Fprintf(stderr, "%sif it should be here: `%s request %s` prints a report you can open as an issue (it sends nothing)\n",
+		pfx(), pkgsTool, np.Project)
+}
+
+// pkgsTool is the sibling binary's name. `tool` is whichever of the two is
+// running, and the verb lives in pkgs — so a pkgx user must be sent there
+// by name rather than to a verb pkgx does not have.
+const pkgsTool = "pkgs"
 
 // requestFacts is the whole payload. Every field is here on purpose and
 // there is no map, no "extra" and no free text from the environment: a

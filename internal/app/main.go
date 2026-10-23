@@ -302,6 +302,7 @@ func run(argv []string) int {
 	}
 	if err := exec(plus, rest, format, graphOS, graphArch, out); err != nil {
 		fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
+		sayHowToAsk(err, os.Stderr)
 		// Only the shell rendering gets `false`: --json and --modulefile are
 		// data, and a shell keyword in them would be a different kind of lie.
 		if describing && format == formatShell {
