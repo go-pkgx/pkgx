@@ -94,6 +94,34 @@ func TestItSendsNothingAndSaysSo(t *testing.T) {
 	}
 }
 
+// ⛔ A FIXTURE MUST NOT ASSUME WHICH MACHINE IT RUNS ON. The "published
+// somewhere else" case first hard-coded `linux/s390x` as the elsewhere,
+// which is somewhere else on every arch this fleet tests — except the
+// s390x qemu lane, where it is the HOST, so the code correctly answered
+// "published for this platform" and the test called that a defect. Green
+// on five lanes and red on the sixth, for a reason that was in the test.
+func elsewhereThan(host string) string {
+	const a, b = "linux/s390x", "darwin/aarch64"
+	if host == a {
+		return b
+	}
+	return a
+}
+
+// …and the helper is checked against every platform this fleet builds for,
+// so the fix is proved here rather than by waiting for the one lane that
+// would have caught it again.
+func TestElsewhereIsNeverTheHost(t *testing.T) {
+	for _, host := range []string{
+		"linux/s390x", "darwin/aarch64", "linux/x86-64",
+		"windows/x86-64", "linux/aarch64", "darwin/x86-64",
+	} {
+		if got := elsewhereThan(host); got == host {
+			t.Errorf("elsewhereThan(%q) = %q, which is the host", host, got)
+		}
+	}
+}
+
 // The three states a reader needs told apart, because "it is missing" covers
 // two very different requests: build it at all, or build it for me.
 func TestTheThreeStates(t *testing.T) {
@@ -111,7 +139,7 @@ func TestTheThreeStates(t *testing.T) {
 			"sha256-1b6d86777009e1e502260a9408da230cfc8a5e6d6fd6f8a339d7b77348e6c330",
 			"sha256-5e3e8dd10513699116134fe1455e53db8d7d6b575a25d539bac524fc920c12b9",
 		}}, "never published in this registry"},
-		{"not for this platform", fakeOCI{tags: []string{"1.0.0"}, plats: []string{"linux/s390x"}}, "NOT for " + host},
+		{"not for this platform", fakeOCI{tags: []string{"1.0.0"}, plats: []string{elsewhereThan(host)}}, "NOT for " + host},
 		{"published here", fakeOCI{tags: []string{"1.0.0"}, plats: []string{host}}, "published for this platform"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
