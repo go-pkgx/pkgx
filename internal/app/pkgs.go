@@ -85,6 +85,11 @@ usage:
   pkgs catalog reindex               rebuild the name index <TAB> reads from
                                      the catalogue already on disk, with NO
                                      network — for an image that ships one
+  pkgs request [--url] <project>     a package is missing: what the registry
+                                     actually has, as a report you can read
+                                     and then open as an issue. It SENDS
+                                     NOTHING — no argv, no environment, no
+                                     paths; the fields are fixed and printed
   pkgs catalog platforms             which platforms the registry publishes a
                                      catalogue for, one per line, ready to hand
                                      back to --platform. Asks the registry: no
@@ -152,6 +157,8 @@ func runVerb(argv []string) (int, bool) {
 		return runWhy(argv[1:], os.Stdout, os.Stderr), true
 	case "search":
 		return runSearch(argv[1:], os.Stdout, os.Stderr), true
+	case "request":
+		return runRequest(argv[1:], os.Stdout, os.Stderr), true
 	case "browse":
 		return runBrowse(argv[1:], os.Stdin, os.Stdout, os.Stderr), true
 	case "completion":
