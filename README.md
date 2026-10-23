@@ -533,6 +533,27 @@ published*, *published for other platforms but not yours*, or *already here*,
 which it **refuses** to file, since an issue with a false premise spends a
 maintainer's trust.
 
+That third answer is also how you check a rollout, because it says **which
+version** and **where else**:
+
+```console
+$ pkgs request opendev.org/openstack/python-openstackclient
+project   opendev.org/openstack/python-openstackclient
+platform  darwin/aarch64
+pkgs      0.27.0
+state     published for darwin/aarch64 at 10.5.0
+          also linux/aarch64 linux/x86-64
+
+pkgs: nothing to request: opendev.org/openstack/python-openstackclient 10.5.0 is published for darwin/aarch64
+```
+
+⛔ It used to say only `published for this platform` — true, and silent
+about the one thing being asked. Measured on myself the day after shipping
+it: having rebuilt `vitejs.dev` to close six advisories, I ran this to see
+whether the remedy had landed, got that line, and went to the registry by
+hand for a fact the command already held. A rollout happens per platform,
+so *here, and also there* is the shape of the answer.
+
 ⛔ **And look at what else that line contains: `--domain stratuslab`.** A
 reporter that attached "the command that failed" would publish an
 organisation's infrastructure names into a public tracker, from a machine
