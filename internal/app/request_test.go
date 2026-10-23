@@ -141,7 +141,10 @@ func TestTheThreeStates(t *testing.T) {
 			"sha256-1b6d86777009e1e502260a9408da230cfc8a5e6d6fd6f8a339d7b77348e6c330",
 			"sha256-5e3e8dd10513699116134fe1455e53db8d7d6b575a25d539bac524fc920c12b9",
 		}}, "never published in this registry"},
-		{"not for this platform", fakeOCI{tags: []string{"1.0.0"}, plats: []string{elsewhereThan(host)}}, "NOT for " + host},
+		// ⛔ WITH ITS VERSION. An older version may well be installable
+		// here, so "NOT for darwin/aarch64" bare reads as "you cannot have
+		// this package" when it means "you cannot have 26.12.1".
+		{"not for this platform", fakeOCI{tags: []string{"1.0.0"}, plats: []string{elsewhereThan(host)}}, "1.0.0 published for " + elsewhereThan(host) + ", NOT for " + host},
 		// ⛔ AND IT SAYS WHICH VERSION. "published for this platform" is true
 		// and answers a question nobody asked: measured on myself the day
 		// after shipping this, checking whether a rebuild closing six
@@ -157,6 +160,32 @@ func TestTheThreeStates(t *testing.T) {
 				t.Errorf("state not reported as %q:\n%s", c.want, out.String())
 			}
 		})
+	}
+}
+
+// ⛔ THE NEWEST IS NUMERIC, NOT ALPHABETICAL. Measured live on
+// 2026-10-24, an hour after nodejs.org 26.12.1 was published:
+//
+//	state     published for darwin/aarch64 at 26.8.1
+//
+// because the tags were ordered with sort.Strings and "26.8.1" > "26.12.1"
+// as text. The version in that line is the smaller half of the damage: the
+// platform list under it came from `Platforms(project, newest)`, so it
+// described the wrong version's index.
+func TestTheNewestVersionIsNotTheAlphabeticalOne(t *testing.T) {
+	host := hostPlatform()
+	// The real listing, in an order a registry is free to return.
+	withOCI(t, fakeOCI{
+		tags:  []string{"26.8.0", "26.12.1", "26.8.1", "26.9.0"},
+		plats: []string{host},
+	})
+	var out, errb bytes.Buffer
+	runRequest([]string{"nodejs.org"}, &out, &errb)
+	if !strings.Contains(out.String(), "at 26.12.1") {
+		t.Errorf("the newest version is wrong:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "at 26.8.1") {
+		t.Errorf("it picked the alphabetically last tag:\n%s", out.String())
 	}
 }
 
