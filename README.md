@@ -1170,6 +1170,29 @@ $ pkgs env import /opt/modulefiles/openmpi.lua /opt/modulefiles/hdf5
 pkgx: 1 of 2 modulefile(s) not converted — nothing written, because a PARTIAL conversion is the one outcome nobody can check
 ```
 
+⛔ **The file it writes is a boundary, and since v0.28.0 two more things are
+refused there.** A modulefile is somebody else's file, and the HCL2 this
+generates is config `pkgx env` later evaluates — so whatever a modulefile can
+put into it, it can put into your environment.
+
+- **A name that is not an environment variable name.** `setenv` chooses the
+  key, and the key used to be interpolated into the generated file raw while
+  every value was escaped. `setenv "X\" = \"1" v` therefore closed the
+  attribute and opened another; with a newline, a second attribute; with a
+  brace, a second `env` block. A name outside `[A-Za-z_][A-Za-z0-9_]*` could
+  not be exported by a shell anyway, so it is refused with its line like any
+  other statement this will not guess at.
+- **A value that an HCL2 string cannot spell.** Go escapes an invalid UTF-8
+  byte as `\xNN` and a bell as `\a`; HCL2 knows `\n` `\r` `\t` `\"` `\\`
+  `\uNNNN` `\UNNNNNNNN` and nothing else. So a path off a Latin-1 filesystem
+  used to produce a file that would not load, under a header saying nothing
+  was skipped. Those bytes have no spelling in UTF-8, so refusing them is
+  honest where mangling them into `U+FFFD` would not be.
+
+Both were found by `FuzzImportedModulefileGeneratesParseableHCL`, which
+round-trips arbitrary modulefiles through the converter and a real HCL parser
+— the second of them within a second of the target first existing.
+
 ### Two things no code here removes
 
 - **MPI and the interconnect come from the host.** libfabric/UCX, Slurm's PMI
