@@ -27,6 +27,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // modImport is what one modulefile turned into.
@@ -81,6 +83,15 @@ func importModulefile(path string, r io.Reader) (modImport, []refusal, error) {
 		Prepend: map[string][]string{},
 		Append:  map[string][]string{},
 		Setenv:  map[string]string{},
+	}
+	// The name is the env block's LABEL, written with %q like every value,
+	// and it comes from the filename — which on an old filesystem is just
+	// bytes. Same reason as badEnvValue: Go would spell an invalid byte
+	// \xNN and HCL2 has no such escape, so the generated file would not
+	// load. This is a whole-file refusal because the name is the thing the
+	// conversion would be called by.
+	if why := badEnvValue("the module name, taken from the filename,", m.Name); why != "" {
+		return modImport{}, nil, fmt.Errorf("%s: %s", path, why)
 	}
 	lua := strings.HasSuffix(path, ".lua")
 	var refusals []refusal
@@ -267,6 +278,75 @@ func unescape(s string) string {
 	return strings.NewReplacer(`\"`, `"`, `\'`, `'`, `\\`, `\`, `\n`, "\n", `\t`, "\t").Replace(s)
 }
 
+// envName is the POSIX shape of an environment variable name. A name outside
+// it cannot be exported by a shell anyway, so accepting one would import a
+// variable nothing can set.
+var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// badEnvName says why a name may not be used as an environment variable, or
+// "" if it may.
+//
+// ⛔ THIS IS A BOUNDARY, NOT A TIDINESS CHECK. A modulefile is somebody
+// else's file — the whole point of `env import` is converting an HPC site's
+// tree — and writeHCL generates config that `pkgx env` later evaluates. The
+// generated file escaped every VALUE with %q and wrote every KEY raw, so a
+// name carrying a quote, a newline or an `=` closed the attribute it was in
+// and opened whatever came next:
+//
+//	setenv "X\" = \"1" v   ->      X" = "1 = "v"      (generated.hcl2)
+//	setenv "A B" v         ->      A B = "v"
+//
+// Refusing it here rather than quoting it there is the honest half: the
+// refusal is REPORTED, like every other statement this converter will not
+// guess at, instead of silently importing a variable no shell can set.
+// writeHCL quotes keys as well, so the generated file is well formed even if
+// a future caller builds a modImport another way.
+func badEnvName(s string) string {
+	switch {
+	case s == "":
+		return "an empty environment variable name"
+	case len(s) > 256:
+		return fmt.Sprintf("an environment variable name of %d characters", len(s))
+	case !envName.MatchString(s):
+		return fmt.Sprintf("%q is not an environment variable name (letters, digits and _, not starting with a digit), so no shell could set it", s)
+	}
+	return ""
+}
+
+// badEnvValue says why a value may not be imported, or "" if it may.
+//
+// ⛔ GO'S %q IS NOT AN HCL2 STRING. Found by FuzzImportedModulefileGenerates-
+// ParseableHCL in under a second, on `setenv A \xff`:
+//
+//	A = "\xff"      generated.hcl2:5,10-12: Invalid escape sequence;
+//	                The symbol "x" is not a valid escape sequence selector.
+//
+// Go escapes an invalid UTF-8 byte as \xNN and a bell as \a; HCL2 knows
+// \n \r \t \" \\ \uNNNN \UNNNNNNNN and nothing else. So a value that merely
+// came from a Latin-1 filesystem produced a config file that will not load —
+// `env import` reporting "nothing was skipped" over a file nothing can read.
+//
+// An HCL2 string is UTF-8, so a byte that is not has no representation and
+// refusing is the honest answer rather than mangling a path into U+FFFD.
+// Control characters go with it: a value that survives import is one that
+// gets printed, and this family already has the rule that what survives
+// parsing is safe to print. \t and \n are kept — both are real in a value
+// and both are escapes HCL2 has.
+func badEnvValue(what, s string) string {
+	if !utf8.ValidString(s) {
+		return fmt.Sprintf("%s is not valid UTF-8, and an HCL2 string has no way to spell the bytes it contains", what)
+	}
+	for _, r := range s {
+		if r == '\t' || r == '\n' {
+			continue
+		}
+		if unicode.IsControl(r) {
+			return fmt.Sprintf("%s carries %q, a control character", what, r)
+		}
+	}
+	return ""
+}
+
 // apply records one recognised statement, or says why it is refused.
 //
 // The refusals are not a gap to fill later. `conflict`, `family` and
@@ -279,25 +359,50 @@ func (m *modImport) apply(verb string, args []string) string {
 		if len(args) < 2 {
 			return "prepend_path needs a variable and a value"
 		}
+		if why := badEnvName(args[0]); why != "" {
+			return why
+		}
+		if why := badEnvValue("the path", args[1]); why != "" {
+			return why
+		}
 		m.Prepend[args[0]] = append(m.Prepend[args[0]], args[1])
 	case "append_path", "append-path":
 		if len(args) < 2 {
 			return "append_path needs a variable and a value"
+		}
+		if why := badEnvName(args[0]); why != "" {
+			return why
+		}
+		if why := badEnvValue("the path", args[1]); why != "" {
+			return why
 		}
 		m.Append[args[0]] = append(m.Append[args[0]], args[1])
 	case "setenv":
 		if len(args) < 2 {
 			return "setenv needs a variable and a value"
 		}
+		if why := badEnvName(args[0]); why != "" {
+			return why
+		}
+		if why := badEnvValue("the value", args[1]); why != "" {
+			return why
+		}
 		m.Setenv[args[0]] = args[1]
 	case "unsetenv":
 		if len(args) < 1 {
 			return "unsetenv needs a variable"
 		}
+		if why := badEnvName(args[0]); why != "" {
+			return why
+		}
 		m.Unsetenv = append(m.Unsetenv, args[0])
 	case "whatis", "module-whatis":
+		d := strings.Join(args, " ")
+		if why := badEnvValue("the description", d); why != "" {
+			return why
+		}
 		if m.Description == "" {
-			m.Description = strings.Join(args, " ")
+			m.Description = d
 		}
 	case "help", "module-help":
 		// Prose for `module help`. It changes no environment.
@@ -307,6 +412,29 @@ func (m *modImport) apply(verb string, args []string) string {
 		return "unknown statement " + verb
 	}
 	return ""
+}
+
+// hclKey is an attribute name for the generated file: as written when it is
+// an identifier, quoted when it is not.
+//
+// ⛔ THE SECOND LINE, AND IT ONLY MOVES FOR INPUT THAT CANNOT ARRIVE.
+// badEnvName refuses every name that is not an identifier at the point the
+// modulefile is read, so for anything `env import` produces this is the
+// identity and the generated file looks exactly as it always has. It exists
+// because writeHCL used to interpolate the key with %s unconditionally, and
+// a generated file that its own input can break should not be reachable at
+// all — including from a future caller that builds a modImport some other
+// way and never passes through apply.
+//
+// Quoting rather than dropping: HCL2 accepts a quoted attribute name in an
+// object, so the worst case is a well-formed file naming a variable nobody
+// can set — which is visible and inert — instead of a corrupted file that
+// can gain attributes and blocks.
+func hclKey(k string) string {
+	if envName.MatchString(k) {
+		return k
+	}
+	return fmt.Sprintf("%q", k)
 }
 
 // writeHCL renders one conversion as an HCL2 env block.
@@ -322,7 +450,7 @@ func writeHCL(m modImport, w io.Writer) {
 	if len(m.Setenv) > 0 {
 		fmt.Fprintln(w, "  setenv = {")
 		for _, k := range sortedMapKeys(m.Setenv) {
-			fmt.Fprintf(w, "    %s = %q\n", k, m.Setenv[k])
+			fmt.Fprintf(w, "    %s = %q\n", hclKey(k), m.Setenv[k])
 		}
 		fmt.Fprintln(w, "  }")
 	}
@@ -350,7 +478,7 @@ func writeMapOfLists(w io.Writer, name string, m map[string][]string) {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		fmt.Fprintf(w, "    %s = [", k)
+		fmt.Fprintf(w, "    %s = [", hclKey(k))
 		for i, v := range m[k] {
 			if i > 0 {
 				fmt.Fprint(w, ", ")
