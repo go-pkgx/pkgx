@@ -90,6 +90,11 @@ usage:
                                      and then open as an issue. It SENDS
                                      NOTHING — no argv, no environment, no
                                      paths; the fields are fixed and printed
+  pkgs journal [-n N] [--clear]      what has failed HERE and how often: the
+                                     packages this registry did not have, most
+                                     asked for first. A local file, written on
+                                     failure and read by you. It SENDS NOTHING
+                                     either; PKGX_JOURNAL=0 records nothing
   pkgs catalog platforms             which platforms the registry publishes a
                                      catalogue for, one per line, ready to hand
                                      back to --platform. Asks the registry: no
@@ -159,6 +164,8 @@ func runVerb(argv []string) (int, bool) {
 		return runSearch(argv[1:], os.Stdout, os.Stderr), true
 	case "request":
 		return runRequest(argv[1:], os.Stdout, os.Stderr), true
+	case "journal":
+		return runJournal(argv[1:], os.Stdout, os.Stderr), true
 	case "browse":
 		return runBrowse(argv[1:], os.Stdin, os.Stdout, os.Stderr), true
 	case "completion":
