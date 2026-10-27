@@ -89,6 +89,8 @@ asking ABOUT packages is pkgs, a separate command:
   pkgs request [--url] <project>     a package is missing: what the registry
                                      has, as a report you can open as an
                                      issue. Sends nothing by itself
+  pkgs journal [-n N] [--clear]      what has failed here and how often, most
+                                     asked for first. Local; sends nothing
   pkgs catalog [update|reindex]      which catalogue is here; update fetches
                                      one, and takes --platform os/arch
   pkgs store [--by-size] [--root …]  what this disk holds, and what it is for
@@ -303,6 +305,10 @@ func run(argv []string) int {
 	if err := exec(plus, rest, format, graphOS, graphArch, out); err != nil {
 		fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
 		sayHowToAsk(err, os.Stderr)
+		// Recorded at the SAME site the hint is printed from, so the
+		// journal's idea of a failure cannot drift from what the user was
+		// just told. Local only, and it cannot fail this command: journal.go.
+		recordFailure(err)
 		// Only the shell rendering gets `false`: --json and --modulefile are
 		// data, and a shell keyword in them would be a different kind of lie.
 		if describing && format == formatShell {
