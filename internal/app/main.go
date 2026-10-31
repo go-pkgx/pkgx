@@ -74,6 +74,14 @@ usage:
                                      and exit 1 if none does; with nothing,
                                      every command the catalogue carries.
                                      Reads the catalogue, so no network
+  pkgx --quiet|--silent|-q|-s …      accepted for upstream compatibility, and
+                                     they change NOTHING here: this
+                                     implementation prints no progress, so
+                                     there is none to suppress. They are taken
+                                     because real scripts pass them — the
+                                     shebang of upstream's own pkgm does — and
+                                     such a script must not break on the day
+                                     this binary is the pkgx on PATH
   pkgx -h, --help                    show this help
   pkgx -v, --version                 show version
 
@@ -198,6 +206,21 @@ func run(argv []string) int {
 	// thing, and the surest way to guarantee that is to answer and leave
 	// before the rest of the program exists.
 	if maybeComplete(argv, os.Getenv, os.Stdout) {
+		return 0
+	}
+
+	// ⛔ UPSTREAM'S VERBOSITY FLAGS, BEFORE argv[0] IS READ AS A PACKAGE.
+	// Without this, `pkgx --quiet deno^2.1 …` — which is the SHEBANG of
+	// upstream's own `pkgm` — came back as
+	//
+	//	pkgx: no project declares the command "--quiet" — try: pkgs search --quiet
+	//
+	// so it did not merely fail, it misdiagnosed: the flag was looked up as a
+	// command name. Reported 2026-10-31 by someone whose `sudo pkgm install`
+	// broke because the `pkgx` on PATH was this one. See stripVerbosity.
+	argv = stripVerbosity(argv)
+	if len(argv) == 0 {
+		fmt.Print(usage)
 		return 0
 	}
 
@@ -333,6 +356,74 @@ const (
 	formatModulefile                     // an Lmod modulefile (Lua)
 	formatGraph                          // the resolved dependency graph, for a person
 )
+
+// stripVerbosity removes upstream's verbosity flags from the front of the
+// argument list, and leaves every other flag exactly where it was.
+//
+// # ⛔ WHY A FLAG THAT DOES NOTHING IS ACCEPTED HERE
+//
+// `splitPlatform` argues two screens below that "a flag that is silently
+// without effect is worse than one that is absent", and that is right. This is
+// the exception that proves the rule, so it is written down rather than left to
+// be rediscovered as an inconsistency.
+//
+// This implementation prints no progress at all — no spinner, no "installing
+// X", nothing on the success path — so there is nothing for `--quiet` to
+// suppress and honouring it changes no byte of output. That makes it
+// ineffective. It does NOT make it silent: the usage text says so in the line
+// that documents it.
+//
+// The alternative is worse than a documented no-op. Upstream pkgx has
+// `--quiet`, `--silent`, `-q`, `-s`, and real scripts in the wild pass them —
+// including the shebang of upstream's own `pkgm`, which is how this was found.
+// Refusing them means any such script breaks the moment this binary is the
+// `pkgx` on PATH, and it breaks with a message about a missing *command*.
+// Compatibility with a flag we have nothing to do about costs one branch; the
+// drop-in claim in the usage text is worth more than that.
+//
+// If this ever grows progress output, the flags are the place to gate it and
+// the usage line is the place to stop apologising.
+//
+// # What upstream accepts, and what this takes
+//
+// Read from pkgxdev/pkgx `crates/cli/src/args.rs` (Rust, 2026-10-31): the long
+// forms `--quiet` and `--silent`, and single-dash CLUSTERS of `q h s j v ! Q C`
+// where a second `q` upgrades quiet to silent.
+//
+// This takes the two long forms and clusters made only of `q` and `s`. Anything
+// else is left untouched for the dispatch below to handle — `-h`, `-v` and `-Q`
+// because this fork has them, and `-j`, `-!`, `-C` because it does not, and a
+// flag it cannot honour must reach the code that says so rather than be eaten
+// here. Quiet and silent are not distinguished, for the reason above: neither
+// has anything to act on.
+//
+// Leading only, like `splitLock`, `splitFormat` and `splitPlatform` beside it.
+// Upstream scans the whole line; the case that matters — a shebang — puts them
+// first.
+func stripVerbosity(argv []string) []string {
+	for len(argv) > 0 {
+		arg := argv[0]
+		if arg == "--quiet" || arg == "--silent" {
+			argv = argv[1:]
+			continue
+		}
+		if len(arg) < 2 || arg[0] != '-' || strings.HasPrefix(arg, "--") {
+			break
+		}
+		onlyVerbosity := true
+		for _, c := range arg[1:] {
+			if c != 'q' && c != 's' {
+				onlyVerbosity = false
+				break
+			}
+		}
+		if !onlyVerbosity {
+			break
+		}
+		argv = argv[1:]
+	}
+	return argv
+}
 
 // splitFormat pulls a leading --json / --modulefile off the argument list.
 func splitFormat(argv []string) (outputFormat, []string) {
