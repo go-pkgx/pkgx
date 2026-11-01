@@ -136,6 +136,10 @@ env:
                Named and unreadable is an error, not a quiet fallback
   PKGX_DIST    bottle source (default: oci://ghcr.io/go-pkgx/packages)
   PKGX_VERIFY  verify bottle signatures, fail-closed (default: on)
+  PKGX_DEPRECATED
+               a JSON file of end-of-life release lines per project, which
+               REPLACES the list built into this binary; {} turns it off.
+               "pkgs compat" resolves, so it reads the same list pkgx does
 
   The variables keep the PKGX_ spelling: they name a store and a registry
   that both binaries share, not a program.

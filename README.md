@@ -1052,6 +1052,58 @@ or in a fresh scratch image: it is the only true one available, and the two
 are never merged, because "available" about a mix of a registry and a local
 store is a word with no meaning.
 
+## An abandoned release line is not what you get by default
+
+```console
+$ pkgx --graph --platform linux/x86-64 +openssl.org@^3
+openssl.org 3.5.8
+└─ curl.se/ca-certs 2026.10.20
+
+$ pkgx --graph --platform linux/x86-64 +openssl.org@~3.6
+pkgx: openssl.org 3.6.4 is on end-of-life release line 3.6 and nothing
+      supported satisfies "~3.6"; using it
+openssl.org 3.6.4
+```
+
+`^3` used to mean "the newest 3.x", and on 2026-11-01 the newest 3.x was
+3.6.4 — whose release line reached its end of life **that day**, while the
+3.5 LTS sat in the same registry supported until 2030-04-08. A resolver that
+only knows "newest" walks onto an abandoned line the moment upstream
+abandons it, and nothing in a CVE feed says so: an abandoned line has
+nothing *known* wrong with it, because nobody is looking and no fix is
+coming.
+
+So the binary carries the verdict. Measured against the registry and
+[endoflife.date](https://endoflife.date) on 2026-11-01, `openssl.org`
+publishes 72 tags across nine lines, of which **seven are end-of-life**
+(1.1.1, 3.0, 3.1, 3.2, 3.3, 3.4, 3.6) and two supported — 3.5 (LTS, to
+2030-04-08) and 4.0 (to 2027-05-14). `bk eol -product openssl` is the
+command that judges them.
+
+**It is a rank, not a filter.** `=3.6.4`, `^3.6.4`, `~3.6` and every lock
+still resolve to 3.6.4, with the warning above on stderr, because nothing
+supported satisfies them. Reproducibility and an explicit request outrank
+the preference; a lock that stopped resolving would be a worse defect than
+the one this fixes. The preference can only change an answer where a
+supported candidate *also* satisfies the constraint, which is why it never
+reaches across a soname boundary — `^3` and `^4` share no satisfier.
+
+Moving `^3` from 3.6.4 to 3.5.8 stays inside `libssl.so.3`, and the ABI cost
+is bounded and was measured rather than assumed: 3.6.4 exports **6499**
+symbols and 3.5.8 **6476**, so 23 symbols are the whole of the risk (the new
+KEM `CMS_RecipientInfo_kemri_*`, the `CRYPTO_*_array` allocators, `EVP_SKEY`
+and friends). Across the ten heaviest consumers — curl.se, openssh.com,
+python.org, ruby-lang.org, postgresql.org, nodejs.org, php.net, erlang.org,
+openldap.org, libssh2.org — **45,601 imported symbols, none of them on that
+list**. A sample, not a proof about every package.
+
+`PKGX_DEPRECATED` overrides the built-in list with a JSON file of your own,
+`{"openssl.org": ["3.6"]}`. Setting it to `{}` turns the preference off. A
+file that cannot be read or parsed is an empty list **and a warning** — not
+a silent fall back to the built-in one, because a named file is a statement
+about what you want and quietly substituting something else would hide the
+mistake behind behaviour that looks like it worked.
+
 ## Running exactly what a lock pins
 
 ```console
@@ -1248,6 +1300,11 @@ round-trips arbitrary modulefiles through the converter and a real HCL parser
   pair with `PKGX_VERIFY=0`)
 - `PKGX_VERIFY` — verify bottle signatures, fail-closed (default on; set
   `0`/`false`/`no`/`off` to disable)
+- `PKGX_DEPRECATED` — a JSON file of end-of-life release lines per project,
+  `{"openssl.org": ["3.6"]}`, which **replaces** the list built into the
+  binary; `{}` turns the preference off. Named and unreadable is an empty list
+  and a warning, not a fall back. See
+  [above](#an-abandoned-release-line-is-not-what-you-get-by-default)
 
 By default `pkgx <pkg>` fetches from the signed registry and verifies each
 bottle's signature before running it — no env needed.

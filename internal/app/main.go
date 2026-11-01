@@ -120,6 +120,13 @@ env:
                pantry — pair with PKGX_VERIFY=0)
   PKGX_VERIFY  verify bottle signatures, fail-closed (default: on; set
                0/false/no/off to disable)
+  PKGX_DEPRECATED
+               a JSON file of end-of-life release lines per project, e.g.
+               {"openssl.org": ["3.6"]}, which REPLACES the list built into
+               this binary; {} turns the preference off. A version on a
+               listed line is ranked LAST, never removed, so "=3.6.4" and a
+               lock still resolve to it and say so on stderr. Named and
+               unreadable is an empty list and a warning, not a fall back
 
   ~/.pkgx/config.hcl2 sets defaults for the PKGX_* / OCI_* variables above
   (HCL2 attributes, e.g. PKGX_DIST = "oci://ghcr.io/go-pkgx/packages"). A real
