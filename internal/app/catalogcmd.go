@@ -211,10 +211,30 @@ func catalogUpdate(osn, arch string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// catalogStatus says WHICH catalogue is here, so it has to name the one every
+// other command in this binary would read.
+//
+// ⛔ IT USED TO NAME A DIFFERENT FILE. It went straight to catalogPath while
+// `ls`, `search` and <TAB> go through catalogFor, which honours PKGX_CATALOG.
+// So with that variable set, the command whose entire job is "what am I
+// looking at" answered about the host's catalogue while the previous command
+// had read the named one — the same defect as go-pkgx/pkgx#110, in the one
+// place where a wrong answer cannot be caught by comparing it with anything.
 func catalogStatus(stdout, stderr io.Writer) int {
 	osn, arch := bottle.HostSlug()
 	p := catalogPath(osn, arch)
+	named := os.Getenv("PKGX_CATALOG")
+	if named != "" {
+		p = named
+	}
 	b, err := osReadFile(p)
+	if err != nil && named != "" {
+		// NAMED and unreadable is a user's mistake, and browseCatalog
+		// already refuses to paper over it. Printing "run catalog update"
+		// here would point at a file that is not the one they named.
+		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", named, err)
+		return 1
+	}
 	if err != nil {
 		// Not an error: no catalogue yet is the state of every fresh
 		// machine, and the useful thing to print is the command that
