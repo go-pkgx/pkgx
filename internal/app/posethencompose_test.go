@@ -101,6 +101,77 @@ func TestTheComposedEnvironmentCarriesTheDirectoryLibcIsIn(t *testing.T) {
 	}
 }
 
+// ⛔⛔ AND LIBRARY_PATH TOO, which is a different variable read by a different
+// program, and it did not carry the directory at all.
+//
+// LD_LIBRARY_PATH is the LOADER's; LIBRARY_PATH is the COMPILER DRIVER's, for
+// resolving `-lfoo` at link time. composeEnv put every package's lib and lib64
+// on both, and glibc's versioned sub-libdir on LD_LIBRARY_PATH only — so the
+// linker was handed a glibc directory holding nothing and could not find libm.
+//
+// Almost nothing noticed, because almost every build reaches the libc through
+// bk's compiler wrapper and its --sysroot. A recipe that drives `cc` itself
+// does not. perl is one, and on the linux/s390x generation-1 pilot its
+// Configure probed for libm, concluded there was none, and emitted
+//
+//	cc … -o miniperl … -lcrypt          # no -lm
+//	ld.lld: error: undefined symbol: ceil, floor, pow, fmod, atan2, cos, …
+//
+// A probe that cannot find a library concludes the library is absent, and that
+// is indistinguishable from a correct answer until something needs it
+// (go-pkgx/packages#316).
+func TestTheComposedEnvironmentPutsThatDirectoryOnLibraryPathToo(t *testing.T) {
+	dir, versioned, closure := glibcFixture(t)
+	poseSeams(t)
+
+	oldSetup, oldOurs := setupRootfs, loaderIsOurs
+	t.Cleanup(func() { setupRootfs, loaderIsOurs = oldSetup, oldOurs })
+	posed := false
+	setupRootfs = func(string, string) { posed = true }
+	loaderIsOurs = func(string) bool { return posed }
+
+	env := poseThenCompose(closure, dir, bottle.LibPath(closure, dir))
+
+	var lib string
+	for _, e := range env {
+		if strings.HasPrefix(e, "LIBRARY_PATH=") {
+			lib = strings.TrimPrefix(e, "LIBRARY_PATH=")
+		}
+	}
+	if lib == "" {
+		t.Fatalf("no LIBRARY_PATH in the composed environment:\n%s", strings.Join(env, "\n"))
+	}
+	if !strings.Contains(lib, versioned) {
+		t.Errorf("LIBRARY_PATH does not name %s, where libm.so and libc.so are, so `-lm` cannot resolve:\n%s", versioned, lib)
+	}
+}
+
+// ⛔ AND IT STAYS OUT WHEN THE LOADER IS NOT OURS, for a link-time version of
+// the reason LD_LIBRARY_PATH is gated: on a distribution the child's PT_INTERP
+// names the host's ld.so, so linking against our libc.so would pair two halves
+// of different glibcs. Without this, the fix above would be an unconditional
+// widening and would reintroduce that mismatch at the link.
+func TestThatDirectoryStaysOffLibraryPathWhenTheLoaderIsNotOurs(t *testing.T) {
+	dir, versioned, closure := glibcFixture(t)
+	poseSeams(t)
+
+	oldSetup, oldOurs := setupRootfs, loaderIsOurs
+	t.Cleanup(func() { setupRootfs, loaderIsOurs = oldSetup, oldOurs })
+	setupRootfs = func(string, string) {}
+	loaderIsOurs = func(string) bool { return false }
+
+	env := poseThenCompose(closure, dir, bottle.LibPath(closure, dir))
+
+	for _, e := range env {
+		if !strings.HasPrefix(e, "LIBRARY_PATH=") && !strings.HasPrefix(e, "LD_LIBRARY_PATH=") {
+			continue
+		}
+		if strings.Contains(e, versioned) {
+			t.Errorf("a host loader would be paired with our libc: %s", e)
+		}
+	}
+}
+
 // ON A PLATFORM THAT POSES NOTHING, nothing is posed — and the environment is
 // still composed. Without this, making posesLoader always true would pass the
 // two tests above while breaking darwin and windows.

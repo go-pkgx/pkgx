@@ -1149,9 +1149,37 @@ func composeEnv(closure []bottle.Resolved, dir string) composed {
 	// it": the canonical path under /lib or /lib64 resolving INTO dir means
 	// `bk builder` posed ours there, which is exactly the scratch tree. On a
 	// distribution it is a real file in /lib64 and this stays out.
+	// ⛔ AND ONTO LIBRARY_PATH TOO, which it was not, and that is a different
+	// failure with the same cause.
+	//
+	// LD_LIBRARY_PATH is read by the LOADER; LIBRARY_PATH is read by the
+	// COMPILER DRIVER, to resolve `-lfoo` at link time. The loop above puts
+	// every package's `lib` and `lib64` on both, but glibc's real libraries
+	// are one level down in `lib/glibc-<ver>/` — so the linker was handed a
+	// glibc directory that the recipe's own comment says "holds nothing
+	// else", and could not find libm, libc or anything else of glibc's.
+	//
+	// Nothing noticed because almost every build reaches the libc through
+	// bk's compiler wrapper, which passes --sysroot. A recipe that drives
+	// `cc` itself does not, and perl is one: its Configure probes for libm,
+	// found none, and emitted a link line with `-lcrypt` and no `-lm` —
+	//
+	//	ld.lld: error: undefined symbol: ceil, floor, pow, fmod, atan2, …
+	//	❌ BUILD FAIL perl.org 5.44.0
+	//
+	// on the linux/s390x generation-1 pilot (go-pkgx/packages#316). A probe
+	// that cannot find a library concludes the library is absent, which is
+	// indistinguishable from a correct answer until something needs it.
+	//
+	// Gated by the SAME loaderIsOurs test, for a reason that is link-time
+	// rather than run-time but just as real: on a distribution the child's
+	// PT_INTERP names the host's ld.so, so linking against our libc.so would
+	// pair two halves of different glibcs — the mismatch the note above
+	// describes, arriving at the link instead of at the first `mkdir`.
 	if loaderIsOurs(dir) {
 		for _, d := range bottle.LibDirs(closure, dir) {
 			addDir(&ld, d)
+			addDir(&lib, d)
 		}
 	}
 	for _, e := range []struct {
