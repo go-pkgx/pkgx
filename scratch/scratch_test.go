@@ -22,7 +22,7 @@
 // nothing. If it passes, the whole test fails before judging anything else,
 // because every other line would be meaningless.
 //
-// Skipped unless PKGX_SCRATCH_TEST=1, so `go test ./...` on a laptop without
+// Skipped unless ZPKG_SCRATCH_TEST=1, so `go test ./...` on a laptop without
 // docker stays quiet; CI sets it.
 package scratch_test
 
@@ -39,11 +39,11 @@ import (
 )
 
 func TestFromScratchOffline(t *testing.T) {
-	if os.Getenv("PKGX_SCRATCH_TEST") != "1" {
-		t.Skip("set PKGX_SCRATCH_TEST=1 to build the image and run it (needs docker)")
+	if os.Getenv("ZPKG_SCRATCH_TEST") != "1" {
+		t.Skip("set ZPKG_SCRATCH_TEST=1 to build the image and run it (needs docker)")
 	}
 	if _, err := exec.LookPath("docker"); err != nil {
-		t.Fatalf("PKGX_SCRATCH_TEST=1 was asked for and docker is not here: %v", err)
+		t.Fatalf("ZPKG_SCRATCH_TEST=1 was asked for and docker is not here: %v", err)
 	}
 
 	ctx := t.TempDir()
@@ -103,7 +103,7 @@ func TestFromScratchOffline(t *testing.T) {
 	t.Run("tab completion", func(t *testing.T) {
 		start := time.Now()
 		code, out := inImageEntrypoint(t, image, "/pkgx",
-			[]string{"PKGX_GET_COMPLETIONS=0"}, "gnu.o")
+			[]string{"ZPKG_GET_COMPLETIONS=0"}, "gnu.o")
 		took := time.Since(start)
 		if code != 0 || !strings.Contains(out, "gnu.org") {
 			t.Fatalf("exit %d, no completion:\n%s", code, out)
@@ -122,7 +122,7 @@ func TestFromScratchOffline(t *testing.T) {
 		// apart. Asserted as an ANSWER, not as a time, for the same reason
 		// as above.
 		code, out = inImageEntrypoint(t, image, "/pkgx",
-			[]string{"PKGX_GET_COMPLETIONS=0", "PKGX_DIST=oci://127.0.0.1:1/nothing"}, "gnu.o")
+			[]string{"ZPKG_GET_COMPLETIONS=0", "ZPKG_DIST=oci://127.0.0.1:1/nothing"}, "gnu.o")
 		if code != 0 || !strings.Contains(out, "gnu.org") {
 			t.Errorf("a blackhole registry changed the completion: exit %d:\n%s", code, out)
 		}
@@ -155,7 +155,7 @@ func fetchCatalogue(t *testing.T, dir string) {
 		t.Fatalf("building the host pkgs: %v\n%s", err, out)
 	}
 	cmd := exec.Command(host, "catalog", "update", "--platform", "linux/"+pkgxArch())
-	cmd.Env = append(os.Environ(), "PKGX_DIR="+store, "PKGX_CATALOG=")
+	cmd.Env = append(os.Environ(), "ZPKG_DIR="+store, "ZPKG_CATALOG=")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("fetching the catalogue (this step, and only this step, needs the network): %v\n%s", err, out)
 	}

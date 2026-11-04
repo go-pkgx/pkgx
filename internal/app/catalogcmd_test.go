@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // withFetch answers `pkgx catalog update` without a registry, and counts the
@@ -47,8 +47,8 @@ func smallCatalog() bottle.Catalog {
 // So the assertion is a count, and it is zero everywhere but one line.
 func TestUpdateIsTheOnlyThingThatFetches(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
-	t.Setenv("PKGX_CATALOG", "")
+	t.Setenv("ZPKG_DIR", dir)
+	t.Setenv("ZPKG_CATALOG", "")
 	fetches := withFetch(t, smallCatalog(), nil)
 
 	// Reading, with no catalogue on disk: must not fetch, must not fail.
@@ -111,7 +111,7 @@ func TestUpdateIsTheOnlyThingThatFetches(t *testing.T) {
 // not the one anybody reads, and only a rename makes them visible.
 func TestUpdateIsAtomic(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
+	t.Setenv("ZPKG_DIR", dir)
 	withFetch(t, smallCatalog(), nil)
 
 	osn, arch := bottle.HostSlug()
@@ -148,8 +148,8 @@ func TestUpdateIsAtomic(t *testing.T) {
 // about running, which is the opposite of the point.
 func TestAFailedUpdateKeepsTheOldCatalogue(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
-	t.Setenv("PKGX_CATALOG", "")
+	t.Setenv("ZPKG_DIR", dir)
+	t.Setenv("ZPKG_CATALOG", "")
 
 	withFetch(t, smallCatalog(), nil)
 	if code := runCatalogCmd([]string{"update"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
@@ -191,8 +191,8 @@ func TestAFailedUpdateKeepsTheOldCatalogue(t *testing.T) {
 // parse sends them to a command that cannot help.
 func TestTheFallbackSentenceMatchesTheState(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
-	t.Setenv("PKGX_CATALOG", "")
+	t.Setenv("ZPKG_DIR", dir)
+	t.Setenv("ZPKG_CATALOG", "")
 	withFetch(t, smallCatalog(), nil)
 
 	var errb bytes.Buffer
@@ -224,7 +224,7 @@ func TestTheFallbackSentenceMatchesTheState(t *testing.T) {
 // so every command that reads it says how old it is.
 func TestCatalogStatusReads(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
+	t.Setenv("ZPKG_DIR", dir)
 	withFetch(t, smallCatalog(), nil)
 	if code := runCatalogCmd([]string{"update"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
 		t.Fatal("update failed")
@@ -251,8 +251,8 @@ func TestCatalogStatusReads(t *testing.T) {
 // request to run a package called catalog.
 func TestCatalogIsWiredIntoTheDispatch(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
-	t.Setenv("PKGX_CATALOG", "")
+	t.Setenv("ZPKG_DIR", dir)
+	t.Setenv("ZPKG_CATALOG", "")
 	withFetch(t, smallCatalog(), nil)
 	asPkgs(t)
 
@@ -297,7 +297,7 @@ func TestCatalogIsWiredIntoTheDispatch(t *testing.T) {
 // somebody who typed `pkgx catalog` yesterday looks at `pkgx -h` first, and
 // a help text that simply dropped the word would read as "removed".
 func TestUsageMentionsCatalog(t *testing.T) {
-	for _, want := range []string{"pkgs catalog", "PKGX_CATALOG"} {
+	for _, want := range []string{"pkgs catalog", "ZPKG_CATALOG"} {
 		if !strings.Contains(pkgsUsage, want) {
 			t.Errorf("pkgs usage does not mention %q", want)
 		}
@@ -322,7 +322,7 @@ func asPkgs(t *testing.T) {
 //
 // `fetchCatalogFor` always took os and arch; only the command pinned them to
 // the host, and that one line made two measurements impossible from a darwin
-// machine: whether a darwin/x86-64 bottle starts (go-pkgx/packages#330), and
+// machine: whether a darwin/x86-64 bottle starts (go-zpkg/packages#330), and
 // what `bk vulnfetch -catalog` reports for linux before wiring a CI job to
 // run it. An answer that needs a second machine is an answer nobody checks.
 func TestCatalogUpdateTakesAPlatform(t *testing.T) {

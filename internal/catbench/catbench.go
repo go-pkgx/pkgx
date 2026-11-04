@@ -5,7 +5,7 @@
 // witness that survives a refactor is a CLOCK with the network made
 // expensive.
 //
-// So PKGX_DIST points at 10.255.255.1 — a non-routable address, where a
+// So ZPKG_DIST points at 10.255.255.1 — a non-routable address, where a
 // connect() does not fail, it HANGS until the kernel gives up. A run that
 // touches the registry is seconds long and cannot be confused with one that
 // does not. Pointing it at a closed local port would have been the wrong
@@ -116,22 +116,22 @@ func main() {
 		// THE BASELINE THAT ANSWERS: the shipped binary with a catalogue on
 		// disk, which is what a user who has run `catalog update` has. Every
 		// keystroke decodes the whole JSON here.
-		{"before, catalogue (" + baseline + ")", before, []string{"PKGX_DIR=" + jsonOnly, "PKGX_DIST=" + blackhole}},
+		{"before, catalogue (" + baseline + ")", before, []string{"ZPKG_DIR=" + jsonOnly, "ZPKG_DIST=" + blackhole}},
 		// The target: catalogue plus name index.
-		{"after, catalogue + index", after, []string{"PKGX_DIR=" + store, "PKGX_DIST=" + blackhole}},
+		{"after, catalogue + index", after, []string{"ZPKG_DIR=" + store, "ZPKG_DIST=" + blackhole}},
 		// ⛔ THE FALLBACK, MEASURED. The new binary against a store that has
 		// the catalogue and NO index — an image that shipped one file, or a
 		// store half-refreshed. It must answer the same thing, and it must
 		// not be slower than the baseline: the index may only add a faster
 		// path, never a cost on the path without it.
-		{"after, index removed (falls back)", after, []string{"PKGX_DIR=" + jsonOnly, "PKGX_DIST=" + blackhole}},
+		{"after, index removed (falls back)", after, []string{"ZPKG_DIR=" + jsonOnly, "ZPKG_DIST=" + blackhole}},
 		// The two arms that answer NOTHING, kept because they are the
 		// original question this tool was built for — "completion does no
 		// network" — and because the blackhole is what makes a fetch visible
 		// as time. Their answer column reads `(nothing)`, which is how a
 		// reader knows not to compare them with the three above.
-		{"no catalogue, blackholed", before, []string{"PKGX_DIR=" + empty, "PKGX_DIST=" + blackhole}},
-		{"no catalogue, real registry", before, []string{"PKGX_DIR=" + empty}},
+		{"no catalogue, blackholed", before, []string{"ZPKG_DIR=" + empty, "ZPKG_DIST=" + blackhole}},
+		{"no catalogue, real registry", before, []string{"ZPKG_DIR=" + empty}},
 	}
 
 	report(os.Stdout, arms, runs)
@@ -141,7 +141,7 @@ func main() {
 // it with arms it controls. A measuring tool that is never itself measured
 // is how a plausible wrong number gets published.
 func report(w io.Writer, arms []arm, runs int) {
-	fmt.Fprintf(w, "%d runs of: PKGX_GET_COMPLETIONS=0 pkgx gnu.o   (PKGX_DIST=%s)\n\n", runs, blackhole)
+	fmt.Fprintf(w, "%d runs of: ZPKG_GET_COMPLETIONS=0 pkgx gnu.o   (ZPKG_DIST=%s)\n\n", runs, blackhole)
 	fmt.Fprintf(w, "%-22s %10s %10s %10s   %s\n", "arm", "min", "median", "max", "answer")
 	for _, a := range arms {
 		var ds []time.Duration
@@ -162,7 +162,7 @@ func report(w io.Writer, arms []arm, runs int) {
 // measure something nobody experiences.
 func once(a arm) (time.Duration, string) {
 	cmd := exec.Command(a.bin, "gnu.o")
-	cmd.Env = append(append(os.Environ(), a.env...), "PKGX_GET_COMPLETIONS=0", "PKGX_CATALOG=")
+	cmd.Env = append(append(os.Environ(), a.env...), "ZPKG_GET_COMPLETIONS=0", "ZPKG_CATALOG=")
 	t := time.Now()
 	out, _ := cmd.Output()
 	return time.Since(t), string(out)
@@ -194,7 +194,7 @@ func describe(out string) string {
 // from before the split, which has no pkgs beside it — and the staging is
 // not what is being compared anyway.
 func buildPkgs(tree, out string) error {
-	c := exec.Command("go", "build", "-o", out, "./cmd/pkgs")
+	c := exec.Command("go", "build", "-o", out, "./cmd/zpkgs")
 	c.Dir = tree
 	c.Stderr = os.Stderr
 	return c.Run()
@@ -240,7 +240,7 @@ func build(tree, rev, out string) error {
 // the path, derived by the same code the thing under test uses.
 func catalogPath(bin, store string) string {
 	cmd := exec.Command(bin, "catalog")
-	cmd.Env = append(os.Environ(), "PKGX_DIR="+store, "PKGX_CATALOG=")
+	cmd.Env = append(os.Environ(), "ZPKG_DIR="+store, "ZPKG_CATALOG=")
 	out, err := cmd.Output()
 	must(err)
 	p := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
@@ -260,7 +260,7 @@ func catalogPath(bin, store string) string {
 // "the setup did not happen".
 func reindex(bin, store string) error {
 	cmd := exec.Command(bin, "catalog", "reindex")
-	cmd.Env = append(os.Environ(), "PKGX_DIR="+store, "PKGX_CATALOG=")
+	cmd.Env = append(os.Environ(), "ZPKG_DIR="+store, "ZPKG_CATALOG=")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("catalog reindex: %w: %s", err, out)

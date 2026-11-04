@@ -1,9 +1,9 @@
-module github.com/go-pkgx/pkgx
+module github.com/go-zpkg/zpkgx
 
 go 1.27.3
 
 require (
-	github.com/go-pkgx/bottle v0.64.0
+	github.com/go-zpkg/bottle v0.67.0
 	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/zclconf/go-cty v1.19.0
 	golang.org/x/term v0.47.0

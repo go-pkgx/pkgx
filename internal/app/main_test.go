@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 func TestRunConfigWarning(t *testing.T) {
@@ -713,7 +713,7 @@ func captureStdout(t *testing.T, f func()) string {
 // on as though the packages were loaded. The idiom is the one this program's
 // own --help recommends.
 func TestEvalFormFailsTheShell(t *testing.T) {
-	t.Setenv("PKGX_DIR", t.TempDir())
+	t.Setenv("ZPKG_DIR", t.TempDir())
 	fakePantry(t, map[string]string{}) // every project 404s: resolution fails
 	var rc int
 	out := captureStdout(t, func() { rc = run([]string{"+acme.org/absent"}) })
@@ -731,7 +731,7 @@ func TestEvalFormFailsTheShell(t *testing.T) {
 // keyword in them would be a different kind of lie — a consumer parsing the
 // output would choke on it rather than see a failure.
 func TestJSONFormGetsNoShellKeyword(t *testing.T) {
-	t.Setenv("PKGX_DIR", t.TempDir())
+	t.Setenv("ZPKG_DIR", t.TempDir())
 	fakePantry(t, map[string]string{})
 	var rc int
 	out := captureStdout(t, func() { rc = run([]string{"--json", "+acme.org/absent"}) })
@@ -750,7 +750,7 @@ func TestJSONFormGetsNoShellKeyword(t *testing.T) {
 //
 //   - In a FROM-scratch tree the loader is ours, there is no system libc
 //     behind it, and omitting the directory killed every sovereign build on
-//     its first `mkdir` (go-pkgx/bk#272).
+//     its first `mkdir` (go-zpkg/bk#272).
 //   - On a distribution the child's PT_INTERP names the HOST's ld.so, and
 //     pairing it with OUR libc.so.6 breaks a private contract between the two
 //     halves of one glibc:

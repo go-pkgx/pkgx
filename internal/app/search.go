@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // `pkgx search` — for when you know the COMMAND and not the package.
@@ -52,7 +52,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"ZPKG_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	hits := cat.Search(query)

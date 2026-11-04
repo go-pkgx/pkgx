@@ -1,6 +1,6 @@
 # pkgx
 
-[![pkg.go.dev](https://img.shields.io/badge/pkg.go.dev-pkgx-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/go-pkgx/pkgx)
+[![pkg.go.dev](https://img.shields.io/badge/pkg.go.dev-pkgx-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/go-zpkg/zpkgx)
 ![Go](https://img.shields.io/badge/Go-1.27%2B-00ADD8?logo=go&logoColor=white)
 ![License](https://img.shields.io/badge/license-BSD--3--Clause-blue)
 
@@ -8,9 +8,9 @@ The **pkgx runtime** in pure Go — one static binary that runs any pkgx package
 on the fly, and works on a literally-empty `FROM scratch` image.
 
 `pkgx` is the *runtime* half of the pure-Go pkgx family; its sibling
-[pkgm](https://github.com/go-pkgx/pkgm) is the *installer*. Both share one
+[pkgm](https://github.com/go-zpkg/zpkgm) is the *installer*. Both share one
 backend — bottle resolution, download, `FROM scratch` closure completion, and
-loader-aware exec — via the [`github.com/go-pkgx/bottle`](https://github.com/go-pkgx/bottle)
+loader-aware exec — via the [`github.com/go-zpkg/bottle`](https://github.com/go-zpkg/bottle)
 package, so there is a single source of truth and no duplication.
 
 ## ⛔ Two commands: `pkgx` runs, `pkgs` asks
@@ -80,20 +80,20 @@ full dependency closure on demand and execs it.
 **Linux / macOS** — one line, naming the release you want:
 
 ```sh
-curl -fsSL https://go-pkgx.github.io/install.sh | sh -s -- pkgx v0.1.5
+curl -fsSL https://go-zpkg.github.io/install.sh | sh -s -- pkgx v0.1.5
 ```
 
 **Windows** (PowerShell) — `irm | iex` passes no arguments, so the version goes
 in the environment:
 
 ```powershell
-$env:PKGX_TOOL='pkgx'; $env:PKGX_VERSION='v0.1.5'; irm https://go-pkgx.github.io/install.ps1 | iex
+$env:ZPKG_TOOL='pkgx'; $env:ZPKG_VERSION='v0.1.5'; irm https://go-zpkg.github.io/install.ps1 | iex
 ```
 
 The installer downloads the static binary for your os/arch from that
-[release](https://github.com/go-pkgx/pkgx/releases), verifies it against the
+[release](https://github.com/go-zpkg/zpkgx/releases), verifies it against the
 release `SHA256SUMS`, and drops `pkgx` on your `PATH` (`$HOME/.local/bin`, or
-`%LOCALAPPDATA%\Programs\go-pkgx` on Windows; `PKGX_INSTALL` overrides the
+`%LOCALAPPDATA%\Programs\go-zpkg` on Windows; `ZPKG_INSTALL` overrides the
 directory on Unix).
 
 ⛔ **`SHA256SUMS` is a checksum of itself.** It says the binaries match a
@@ -103,7 +103,7 @@ GitHub's **provenance attestation** — signed through Sigstore, saying that
 this repository's release workflow built that file from that commit:
 
 ```sh
-gh attestation verify -R go-pkgx/pkgx pkgx-linux-amd64
+gh attestation verify -R go-zpkg/pkgx pkgx-linux-amd64
 ```
 
 Every file of a release from **v0.23.2** onward carries one; releases before
@@ -114,13 +114,13 @@ than failing closed, so a 404 on an older binary means *unattested*, not
 The version is named on purpose: this line copied today and the same line
 copied in six months install the same bytes, and a bad release does not reach
 everyone who happens to install that hour. To track releases instead, say so —
-`sh -s -- pkgx latest`, or `PKGX_VERSION=latest`. Re-running is the updater; it
+`sh -s -- pkgx latest`, or `ZPKG_VERSION=latest`. Re-running is the updater; it
 skips the download when the target version is already installed.
 
 **Go users**:
 
 ```sh
-go install github.com/go-pkgx/pkgx@latest
+go install github.com/go-zpkg/zpkgx@latest
 ```
 
 ## Usage
@@ -250,7 +250,7 @@ satisfy but not published here: 1.27.1); asked for by ^1.27.1 (requested)
 
 **"Satisfy but not published here"** is the whole answer a recipe author
 needs, and before this the only way to get it was to own the machine.
-Measured 2026-10-18 while checking whether go-pkgx/packages#323 could land:
+Measured 2026-10-18 while checking whether go-zpkg/packages#323 could land:
 it could not, and the host's confident `1.27.1` said the opposite.
 
 The flag is **refused** on `--json`, `--modulefile` and the default shell
@@ -259,18 +259,18 @@ machine — real paths on `PATH`, a real loader — so a foreign platform cannot
 change what they print, and a flag that is silently without effect is worse
 than one that does not exist.
 
-⛔ `PKGX_CATALOG` does **not** redirect `--graph`, and that is why the flag
+⛔ `ZPKG_CATALOG` does **not** redirect `--graph`, and that is why the flag
 was needed rather than the variable: `ls`, `search` and `why` read that file,
 while `--graph` resolves against the registry and never opens it.
 
-It used to say so by saying nothing. Pointing `PKGX_CATALOG` at another
+It used to say so by saying nothing. Pointing `ZPKG_CATALOG` at another
 platform's catalogue and asking `--graph` returned the **host's** answer with
-exit 0, which is how this was found — and nearly how go-pkgx/packages#323 was
+exit 0, which is how this was found — and nearly how go-zpkg/packages#323 was
 read as unblocked when it is not. It now refuses:
 
 ```console
-$ PKGX_CATALOG=/nope/absent.json pkgx --graph +go.dev
-pkgx: PKGX_CATALOG names /nope/absent.json, and --graph does not read a
+$ ZPKG_CATALOG=/nope/absent.json pkgx --graph +go.dev
+pkgx: ZPKG_CATALOG names /nope/absent.json, and --graph does not read a
 catalogue — it resolves against the registry. To ask about another platform:
 --graph --platform os/arch
 ```
@@ -522,7 +522,7 @@ The line that prompted it, from a user on 2026-10-22:
 ```console
 $ pkgx openstack user list --domain stratuslab
 pkgx: opendev.org/openstack/python-openstackclient is not published in
-      ghcr.io/go-pkgx/packages/… : response status code 403: denied
+      ghcr.io/go-zpkg/packages/… : response status code 403: denied
 ```
 
 Two problems in one line. The **403 is ghcr saying "no such repository"** and
@@ -650,7 +650,7 @@ from a package manager is which packages people reach for and do not get, and
 the usual way to collect it is to phone home. This does not. `pkgs request`
 already promises, in its own help, that it *sends nothing*; the journal keeps
 that promise and adds the only thing `request` cannot — memory. Nothing here
-opens a socket, `PKGX_JOURNAL=0` records nothing at all, and `--clear`
+opens a socket, `ZPKG_JOURNAL=0` records nothing at all, and `--clear`
 removes both files.
 
 Three properties it has to have, because a diary that breaks the program is
@@ -744,7 +744,7 @@ stops being true is noticed.
 This was reported from the field, and it is why the paragraph above is not
 the whole story: the mapping lived in the catalogue and only `search` read
 it, so `pkgx hugo version` answered *"no recipe for hugo in …pantry…"* —
-which reads as "go-pkgx does not know hugo" rather than "look under
+which reads as "go-zpkg does not know hugo" rather than "look under
 `provides`". Every `pkgx <tool>` habit, Taskfile and doc had to be
 rewritten with project names to work at all.
 
@@ -807,7 +807,7 @@ generator to be checked against, so nothing can tell you it has drifted. The
 corrected form is the sharper point.
 
 **Nix's is the road this follows**: the
-binary answers completion queries itself when `PKGX_GET_COMPLETIONS` names
+binary answers completion queries itself when `ZPKG_GET_COMPLETIONS` names
 the argument being completed, and the shell snippet is a few lines that call
 it.
 
@@ -823,7 +823,7 @@ completion framework, no python, and no generator to run.
 
 ```
 GET /v2/_catalog                             403   (ghcr issues no token)
-GET /v2/go-pkgx/packages/zlib.net/tags/list  200   ["1.3.2", …]
+GET /v2/go-zpkg/packages/zlib.net/tags/list  200   ["1.3.2", …]
 ```
 
 Versions, yes; projects, no. So the registry carries a **catalogue**, which
@@ -874,7 +874,7 @@ windows/x86-64
 grew.** `--platform` could be *guessed at* one value at a time — a platform
 that is not published is refused with `platform not in index`, so the index
 plainly knows — and nothing could ask it for the set. Measured 2026-10-20:
-`go-pkgx/packages`' daily CVE lane carried its platform list in the
+`go-zpkg/packages`' daily CVE lane carried its platform list in the
 workflow, the list said **two**, and the registry publishes **six**. The
 four nobody asked about were clean, so the cost was coverage rather than an
 exposure; the mechanism guaranteed the seventh would be missed too.
@@ -904,7 +904,7 @@ there is no state between two presses, so a fetch on the read path is paid
 again on every press, in full — an OCI token and the whole catalogue (470 KB in October 2026), each
 time. `guix pull` and `nix-channel --update` put the line in the same place.
 
-Measured, one press of `<TAB>` on `gnu.o`, median of five, with `PKGX_DIST`
+Measured, one press of `<TAB>` on `gnu.o`, median of five, with `ZPKG_DIST`
 pointed at a non-routable address so that a connect **hangs** rather than
 failing instantly — a closed local port would have come back in
 microseconds and looked exactly like not connecting at all:
@@ -992,7 +992,7 @@ completion path, or a lookup that falls back to the registry when a file is
 missing, passes every unit test in this repository and breaks the one
 property the catalogue, the name index and the browser were all built for.
 
-`go test ./scratch/` (with `PKGX_SCRATCH_TEST=1`, and in CI as *FROM
+`go test ./scratch/` (with `ZPKG_SCRATCH_TEST=1`, and in CI as *FROM
 scratch, offline*) builds the image — the two binaries, a real catalogue,
 nothing else: no shell, no libc, no CA bundle, no `/etc/resolv.conf` — and
 runs `ls`, `ls <namespace>`, `ls --tree`, `search`, `why`, `catalog`, the
@@ -1007,7 +1007,7 @@ about the network**:
 
 ```
 control ok: catalog update refused as it must — pkgs: catalog update:
-resolve go-pkgx.dev/catalog v1: … dial udp 192.168.65.7:53: connect:
+resolve go-zpkg.github.io/catalog v1: … dial udp 192.168.65.7:53: connect:
 network is unreachable
 ```
 
@@ -1041,7 +1041,7 @@ gets a different sentence, naming the file: "run `pkgs catalog update`" is
 no help at all for that, and sending somebody to a command that cannot work
 is worse than saying nothing.
 
-`PKGX_CATALOG=<file>` reads a catalogue from somewhere else entirely — an
+`ZPKG_CATALOG=<file>` reads a catalogue from somewhere else entirely — an
 air-gapped image that ships one beside the store, or one being inspected
 before it is published. Set and unreadable is a **refusal**, not a quiet
 fall back to the local store: somebody who names a file means that file.
@@ -1097,7 +1097,7 @@ python.org, ruby-lang.org, postgresql.org, nodejs.org, php.net, erlang.org,
 openldap.org, libssh2.org — **45,601 imported symbols, none of them on that
 list**. A sample, not a proof about every package.
 
-`PKGX_DEPRECATED` overrides the built-in list with a JSON file of your own,
+`ZPKG_DEPRECATED` overrides the built-in list with a JSON file of your own,
 `{"openssl.org": ["3.6"]}`. Setting it to `{}` turns the preference off. A
 file that cannot be read or parsed is an empty list **and a warning** — not
 a silent fall back to the built-in one, because a named file is a statement
@@ -1202,7 +1202,7 @@ what `load a c` would have — independent of the order things were loaded in.
 ### Named environments
 
 ```hcl
-# $PKGX_DIR/environments/site.hcl2
+# $ZPKG_DIR/environments/site.hcl2
 env "cfd" {
   description = "the solver stack, as validated on 2026-09-01"
   packages    = ["openmpi.org@5", "hdf5.org", "python.org@3.12"]
@@ -1240,7 +1240,7 @@ could act on.
 
 ```console
 $ pkgs env import /opt/modulefiles/openmpi.lua /opt/modulefiles/hdf5 \
-    > $PKGX_DIR/environments/site.hcl2
+    > $ZPKG_DIR/environments/site.hcl2
 ```
 
 Lmod's Lua and Environment Modules' TCL, into the same HCL2. It is a **parser,
@@ -1289,18 +1289,18 @@ round-trips arbitrary modulefiles through the converter and a real HCL parser
 - **MPI and the interconnect come from the host.** libfabric/UCX, Slurm's PMI
   and a vendor libmpi tied to a kernel driver cannot live in a hermetic tree;
   bind-mount them, as Spack and Apptainer do.
-- **Metadata storms.** Ten thousand ranks walking a shared `$PKGX_DIR` will melt
+- **Metadata storms.** Ten thousand ranks walking a shared `$ZPKG_DIR` will melt
   a Lustre MDS. Materialise once into a squashfs or SIF and mount it read-only.
 
 ## Environment
 
-- `PKGX_DIR` — bottle store (default `~/.pkgx`)
-- `PKGX_DIST` — bottle source (default `oci://ghcr.io/go-pkgx/packages`, the signed
+- `ZPKG_DIR` — bottle store (default `~/.pkgx`)
+- `ZPKG_DIST` — bottle source (default `oci://ghcr.io/go-zpkg/packages`, the signed
   registry; set `https://dist.pkgx.dev` for the full unsigned upstream pantry —
-  pair with `PKGX_VERIFY=0`)
-- `PKGX_VERIFY` — verify bottle signatures, fail-closed (default on; set
+  pair with `ZPKG_VERIFY=0`)
+- `ZPKG_VERIFY` — verify bottle signatures, fail-closed (default on; set
   `0`/`false`/`no`/`off` to disable)
-- `PKGX_DEPRECATED` — a JSON file of end-of-life release lines per project,
+- `ZPKG_DEPRECATED` — a JSON file of end-of-life release lines per project,
   `{"openssl.org": ["3.6"]}`, which **replaces** the list built into the
   binary; `{}` turns the preference off. Named and unreadable is an empty list
   and a warning, not a fall back. See
@@ -1311,18 +1311,18 @@ bottle's signature before running it — no env needed.
 
 ### `~/.pkgx/config.hcl2`
 
-Rather than exporting the `PKGX_*` (and OCI auth) variables every time, set
+Rather than exporting the `ZPKG_*` (and OCI auth) variables every time, set
 their defaults declaratively in `~/.pkgx/config.hcl2`. It is a small
 [HCL2](https://github.com/hashicorp/hcl) file of top-level attributes; a real
 environment variable always overrides a value set here:
 
 ```hcl2
-# ~/.pkgx/config.hcl2 — defaults for the go-pkgx tools.
+# ~/.pkgx/config.hcl2 — defaults for the go-zpkg tools.
 # A real environment variable always overrides a value set here.
-PKGX_DIST   = "oci://ghcr.io/go-pkgx/packages"  # signed registry (default)
-PKGX_VERIFY = true                               # fail-closed signature check
-# PKGX_DIR    = "/opt/pkgx"
-# PKGX_PANTRY = "https://raw.githubusercontent.com/pkgxdev/pantry/main/projects"
+ZPKG_DIST   = "oci://ghcr.io/go-zpkg/packages"  # signed registry (default)
+ZPKG_VERIFY = true                               # fail-closed signature check
+# ZPKG_DIR    = "/opt/pkgx"
+# ZPKG_PANTRY = "https://raw.githubusercontent.com/pkgxdev/pantry/main/projects"
 # OCI_TOKEN   = "..."                            # private-registry credentials
 ```
 
@@ -1400,7 +1400,7 @@ theorised: an index naming `../outside` completed to
 ../outside	1.0  ✓ 9.9.9
 ```
 
-and that `✓ 9.9.9` is a directory **outside `$PKGX_DIR`**, reported as
+and that `✓ 9.9.9` is a directory **outside `$ZPKG_DIR`**, reported as
 installed — because the note beside a completion asks
 `bottle.InstalledVersions`, which does `filepath.Join(dir, project)`.
 `bottle.UnmarshalCatalog` refuses the name outright (*"has a `..` segment"*);

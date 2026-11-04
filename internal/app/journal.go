@@ -12,7 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // A local record of what did not work.
@@ -70,11 +70,11 @@ const (
 // journalPath is the file, beside the store the rest of the state lives in.
 func journalPath() string { return filepath.Join(bottle.Dir(), "journal.jsonl") }
 
-// journalEnabled is false when PKGX_JOURNAL is set to one of the falsey
+// journalEnabled is false when ZPKG_JOURNAL is set to one of the falsey
 // spellings the rest of this program accepts, so a user who wants no local
 // record of their failures can have none.
 func journalEnabled() bool {
-	switch strings.ToLower(os.Getenv("PKGX_JOURNAL")) {
+	switch strings.ToLower(os.Getenv("ZPKG_JOURNAL")) {
 	case "0", "false", "no", "off":
 		return false
 	}
@@ -247,7 +247,7 @@ func runJournal(args []string, stdout, stderr io.Writer) int {
 	if len(entries) == 0 {
 		fmt.Fprintf(stdout, "no failures recorded (%s)\n", path)
 		if !journalEnabled() {
-			fmt.Fprintln(stdout, "PKGX_JOURNAL is off, so nothing is being recorded")
+			fmt.Fprintln(stdout, "ZPKG_JOURNAL is off, so nothing is being recorded")
 		}
 		return 0
 	}

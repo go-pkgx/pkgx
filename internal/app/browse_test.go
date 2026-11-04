@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 func testCatalog() bottle.Catalog {
@@ -36,7 +36,7 @@ func withCatalog(t *testing.T, c bottle.Catalog, err error) {
 	withInstalled(t, nil)
 	// ⛔ AND NO NAME INDEX, which is the same lesson a third time. The
 	// completion path reads catalog/<os>-<arch>.names before the catalogue,
-	// and that read goes to the real $PKGX_DIR — so a test that faked
+	// and that read goes to the real $ZPKG_DIR — so a test that faked
 	// catalogFor was silently answered from whatever index the developer's
 	// machine had. TestCompletionCarriesTheMark passed in CI, where there is
 	// no ~/.pkgx, and failed the moment this machine had run
@@ -140,7 +140,7 @@ func TestLsFallsBackToTheStoreAndSaysSo(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("PKGX_DIR", dir)
+	t.Setenv("ZPKG_DIR", dir)
 	withCatalog(t, bottle.Catalog{}, os.ErrDeadlineExceeded)
 
 	var out, errb bytes.Buffer
@@ -153,7 +153,7 @@ func TestLsFallsBackToTheStoreAndSaysSo(t *testing.T) {
 	if !strings.Contains(out.String(), "gnu.org") || !strings.Contains(out.String(), "zlib.net") {
 		t.Errorf("the store was not read:\n%s", out.String())
 	}
-	// A dot-directory is not a namespace. $PKGX_DIR holds .local/tmp, and
+	// A dot-directory is not a namespace. $ZPKG_DIR holds .local/tmp, and
 	// listing it told the user there is a package family called `.local`.
 	if strings.Contains(out.String(), ".local") {
 		t.Errorf("a dot-directory was listed as a namespace:\n%s", out.String())
@@ -342,20 +342,20 @@ func TestLsOfAPackageWithNoDependencies(t *testing.T) {
 	}
 }
 
-// PKGX_CATALOG names a file, for an air-gapped image or to inspect one
+// ZPKG_CATALOG names a file, for an air-gapped image or to inspect one
 // before publishing. Set and unreadable is a MISTAKE, not a reason to show
 // the local store under a header blaming the registry.
 func TestAnUnreadableNamedCatalogueIsRefused(t *testing.T) {
 	prev := catalogFor
 	catalogFor = func() (bottle.Catalog, error) { return bottle.Catalog{}, os.ErrNotExist }
 	t.Cleanup(func() { catalogFor = prev })
-	t.Setenv("PKGX_CATALOG", "/nope/absent.json")
+	t.Setenv("ZPKG_CATALOG", "/nope/absent.json")
 
 	var out, errb bytes.Buffer
 	if code := runLs([]string{"gnu.org"}, &out, &errb); code != 2 {
 		t.Fatalf("code=%d, want 2", code)
 	}
-	if !strings.Contains(errb.String(), "PKGX_CATALOG names /nope/absent.json") {
+	if !strings.Contains(errb.String(), "ZPKG_CATALOG names /nope/absent.json") {
 		t.Errorf("stderr=%q", errb.String())
 	}
 	if strings.Contains(errb.String(), "INSTALLED") {
@@ -369,7 +369,7 @@ func TestAnUnreadableNamedCatalogueIsRefused(t *testing.T) {
 		switch k {
 		case completionsEnv:
 			return "0"
-		case "PKGX_CATALOG":
+		case "ZPKG_CATALOG":
 			return "/nope/absent.json"
 		}
 		return ""
@@ -386,7 +386,7 @@ func TestAnUnreadableNamedCatalogueIsRefused(t *testing.T) {
 // the kind of small lie that makes a reader doubt the rest.
 func TestTheHeaderNamesTheCatalogueItRead(t *testing.T) {
 	withCatalog(t, depTestCatalog(), nil)
-	t.Setenv("PKGX_CATALOG", "/some/where.json")
+	t.Setenv("ZPKG_CATALOG", "/some/where.json")
 	var out, errb bytes.Buffer
 	if code := runLs([]string{"zlib.net"}, &out, &errb); code != 0 {
 		t.Fatalf("code=%d", code)

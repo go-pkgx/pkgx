@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // `pkgx why <project> <dependency>` — WHICH LINK put it there.
@@ -36,7 +36,7 @@ func runWhy(args []string, stdout, stderr io.Writer) int {
 	from, to := args[0], args[1]
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"ZPKG_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	// BOTH ENDS ARE CHECKED FIRST, and separately, because "no such

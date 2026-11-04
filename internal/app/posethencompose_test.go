@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // glibcFixture lays out a closure holding glibc's VERSIONED sub-libdir, which
@@ -119,7 +119,7 @@ func TestTheComposedEnvironmentCarriesTheDirectoryLibcIsIn(t *testing.T) {
 //
 // A probe that cannot find a library concludes the library is absent, and that
 // is indistinguishable from a correct answer until something needs it
-// (go-pkgx/packages#316).
+// (go-zpkg/packages#316).
 func TestTheComposedEnvironmentPutsThatDirectoryOnLibraryPathToo(t *testing.T) {
 	dir, versioned, closure := glibcFixture(t)
 	poseSeams(t)

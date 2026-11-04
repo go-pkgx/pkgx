@@ -8,16 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // indexStore lays out a store with a catalogue, and optionally its index,
-// exactly where pkgx looks for them — and points PKGX_DIR at it.
+// exactly where pkgx looks for them — and points ZPKG_DIR at it.
 func indexStore(t *testing.T, cat bottle.Catalog, withIndex bool) (dir, jsonPath, namesPath string) {
 	t.Helper()
 	dir = t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
-	t.Setenv("PKGX_CATALOG", "")
+	t.Setenv("ZPKG_DIR", dir)
+	t.Setenv("ZPKG_CATALOG", "")
 	osn, arch := bottle.HostSlug()
 	jsonPath, namesPath = catalogPath(osn, arch), catalogNamesPath(osn, arch)
 	if err := os.MkdirAll(filepath.Dir(jsonPath), 0o755); err != nil {
@@ -245,7 +245,7 @@ func TestCompletionCatalogPrefersTheIndexAndAgreesWithTheJSON(t *testing.T) {
 	}
 }
 
-// A named PKGX_CATALOG wins outright: there is no index for a file somebody
+// A named ZPKG_CATALOG wins outright: there is no index for a file somebody
 // pointed at, and answering from one built beside a DIFFERENT catalogue is the
 // exact disagreement this format is careful about.
 func TestCompletionCatalogIgnoresTheIndexWhenAFileIsNamed(t *testing.T) {
@@ -259,7 +259,7 @@ func TestCompletionCatalogIgnoresTheIndexWhenAFileIsNamed(t *testing.T) {
 	if err := os.WriteFile(p, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PKGX_CATALOG", p)
+	t.Setenv("ZPKG_CATALOG", p)
 	got := completionCatalog(dir)
 	if len(got.Projects) != 1 || got.Projects[0].Project != "only.this" {
 		t.Errorf("the named catalogue was ignored in favour of the index: %+v", got.Projects)
@@ -336,8 +336,8 @@ func TestCatalogReindexBuildsTheIndexOffline(t *testing.T) {
 
 func TestCatalogReindexRefusals(t *testing.T) {
 	t.Run("no catalogue to index", func(t *testing.T) {
-		t.Setenv("PKGX_DIR", t.TempDir())
-		t.Setenv("PKGX_CATALOG", "")
+		t.Setenv("ZPKG_DIR", t.TempDir())
+		t.Setenv("ZPKG_CATALOG", "")
 		var out, errb bytes.Buffer
 		if code := runCatalogCmd([]string{"reindex"}, &out, &errb); code != 1 {
 			t.Fatalf("code = %d, want 1", code)
@@ -474,8 +474,8 @@ func failNamesWrite(t *testing.T) {
 func TestAnUnwritableIndexWarnsOnUpdateAndFailsOnReindex(t *testing.T) {
 	t.Run("update warns and still refreshes the catalogue", func(t *testing.T) {
 		dir := t.TempDir()
-		t.Setenv("PKGX_DIR", dir)
-		t.Setenv("PKGX_CATALOG", "")
+		t.Setenv("ZPKG_DIR", dir)
+		t.Setenv("ZPKG_CATALOG", "")
 		withFetch(t, threeProjects(), nil)
 		failNamesWrite(t)
 		var out, errb bytes.Buffer
@@ -519,7 +519,7 @@ func TestAnUnwritableIndexWarnsOnUpdateAndFailsOnReindex(t *testing.T) {
 //
 //	../outside	1.0  ✓ 9.9.9
 //
-// and that `✓ 9.9.9` is a directory OUTSIDE $PKGX_DIR, reported as installed —
+// and that `✓ 9.9.9` is a directory OUTSIDE $ZPKG_DIR, reported as installed —
 // because lsNote asks bottle.InstalledVersions, which does
 // filepath.Join(dir, project). bottle.UnmarshalCatalog refuses the name
 // outright; this reader built a Catalog by hand and skipped the refusal.
@@ -568,7 +568,7 @@ func TestTheIndexRefusesANameTheCatalogueParserWouldRefuse(t *testing.T) {
 // ⛔ A COMPLETION TEST MUST NOT READ THE MACHINE IT RUNS ON.
 //
 // The completion path reads the name index before the catalogue, and that read
-// goes to the real $PKGX_DIR. So a test that faked `catalogFor` was silently
+// goes to the real $ZPKG_DIR. So a test that faked `catalogFor` was silently
 // answered from whatever index the developer's machine held:
 // TestCompletionCarriesTheMark passed in CI, where there is no ~/.pkgx, and
 // failed here the moment this machine had run `pkgx catalog reindex`. Green on
@@ -580,8 +580,8 @@ func TestTheIndexRefusesANameTheCatalogueParserWouldRefuse(t *testing.T) {
 func TestAFakedCatalogueIsNotOverruledByARealIndex(t *testing.T) {
 	// A real index on disk, naming a project the faked catalogue does not.
 	dir := t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
-	t.Setenv("PKGX_CATALOG", "")
+	t.Setenv("ZPKG_DIR", dir)
+	t.Setenv("ZPKG_CATALOG", "")
 	planted := bottle.Catalog{Projects: []bottle.CatalogProject{
 		{Project: "from-the-machine.example", Versions: []string{"9.9.9"}},
 	}}

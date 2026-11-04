@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // ⛔ EVERY DIAGNOSTIC NAMES THE BINARY THE USER TYPED.
@@ -334,7 +334,7 @@ func TestTheReleaseStampsThisPackagesVersion(t *testing.T) {
 		t.Skipf("no release workflow to read here: %v", err)
 	}
 	wf := string(b)
-	const want = "-X github.com/go-pkgx/pkgx/internal/app.version="
+	const want = "-X github.com/go-zpkg/zpkgx/internal/app.version="
 	if !strings.Contains(wf, want) {
 		t.Errorf("release.yml does not stamp %q — the binaries would print %q", want, version)
 	}
@@ -343,7 +343,7 @@ func TestTheReleaseStampsThisPackagesVersion(t *testing.T) {
 		t.Error("release.yml still stamps main.version, a symbol neither main declares")
 	}
 	// Both binaries are built, or a release ships half of itself.
-	for _, pkg := range []string{`-o "$DIST/${out}" "$pkg"`, "./cmd/pkgs"} {
+	for _, pkg := range []string{`-o "$DIST/${out}" "$pkg"`, "./cmd/zpkgs"} {
 		if !strings.Contains(wf, pkg) {
 			t.Errorf("release.yml does not look like it builds both binaries: %q is absent", pkg)
 		}
@@ -398,7 +398,7 @@ func TestTheReleaseAttestsWhatItPublishes(t *testing.T) {
 		t.Errorf("the steps run guard=%d attest=%d publish=%d; attestation must sit between the guard and the publish", guard, attest, publish)
 	}
 	// Both binaries, or half a release is signed and half is not.
-	for _, subject := range []string{"dist/pkgx-*", "dist/pkgs-*"} {
+	for _, subject := range []string{"dist/zpkgx-*", "dist/zpkgs-*"} {
 		if !strings.Contains(wf, subject) {
 			t.Errorf("release.yml does not attest %q", subject)
 		}

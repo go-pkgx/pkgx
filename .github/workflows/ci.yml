@@ -24,7 +24,7 @@ jobs:
   # ⛔ AND THE `go` DIRECTIVE IS THE TOOLCHAIN. This lane always pinned
   # go-version 1.27.2, so what CI built was never vulnerable -- but the
   # install instruction on the landing page is `go install
-  # github.com/go-pkgx/pkgx@latest`, which builds with the READER's
+  # github.com/go-zpkg/zpkgx@latest`, which builds with the READER's
   # toolchain, and a directive of 1.27.1 let 1.27.1 do it. Raising it alone
   # took this module from 22 findings to 1, a notice with no released fix.
   vuln:
@@ -59,8 +59,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.27.3'
-      # gofmt, which this lane did not check and its sibling in go-pkgx/bk
-      # does. Measured 2026-10-11: go-pkgx/bk#331 went red on gofmt alone,
+      # gofmt, which this lane did not check and its sibling in go-zpkg/bk
+      # does. Measured 2026-10-11: go-zpkg/bk#331 went red on gofmt alone,
       # after a local check that ran the tests and the coverage profile and
       # not the formatter — an insertion by hand had misaligned a struct
       # literal, which nothing that COMPILES the code can see.
@@ -107,7 +107,7 @@ jobs:
       # runs with none.
       - name: go test ./scratch/
         env:
-          PKGX_SCRATCH_TEST: '1'
+          ZPKG_SCRATCH_TEST: '1'
         run: go test -v -timeout 15m ./scratch/
 
   build:
@@ -156,8 +156,8 @@ jobs:
   # HTTP, and prove `pkgx.exe <project>` fetches the bottle, resolves the .exe,
   # execs it, and both its output AND its exit code propagate.
   #
-  # NB: pkgx depends on github.com/go-pkgx/bottle via a tagged version; the
-  # windows run-path lives in that module. This job checks out go-pkgx/bottle
+  # NB: pkgx depends on github.com/go-zpkg/bottle via a tagged version; the
+  # windows run-path lives in that module. This job checks out go-zpkg/bottle
   # alongside and `replace`s it locally, so it goes green once the windows bottle
   # changes are on bottle's default branch (or a bumped tag pkgx requires).
   windows-run:
@@ -247,14 +247,14 @@ jobs:
             throw 'fixture server never accepted on 127.0.0.1:8199'
           }
           Write-Host "fixture server is accepting on 127.0.0.1:8199"
-          $env:PKGX_DIST   = "http://127.0.0.1:8199"
-          $env:PKGX_PANTRY = "http://127.0.0.1:8199"
-          $env:PKGX_DIR    = "$PWD\store"
+          $env:ZPKG_DIST   = "http://127.0.0.1:8199"
+          $env:ZPKG_PANTRY = "http://127.0.0.1:8199"
+          $env:ZPKG_DIR    = "$PWD\store"
           # This fixture is a static-HTTP dist of UNSIGNED bottles, and the
           # install path now enforces the fail-closed signature check (bottle#21),
           # so it would refuse every one of them. State the posture explicitly;
           # what this job proves is the Windows exec path, not verification.
-          $env:PKGX_VERIFY = "0"
+          $env:ZPKG_VERIFY = "0"
           try {
             # 1. output round-trip
             $out = (& .\pkgx.exe hello.test 2>&1 | Out-String).Trim()

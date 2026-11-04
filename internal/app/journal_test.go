@@ -9,7 +9,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // bottleNoBottleErr is the real error bottle raises when a project exists
@@ -23,8 +23,8 @@ func bottleNoBottleErr(project string) error {
 func journalStore(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
-	t.Setenv("PKGX_JOURNAL", "")
+	t.Setenv("ZPKG_DIR", dir)
+	t.Setenv("ZPKG_JOURNAL", "")
 	return dir
 }
 
@@ -67,8 +67,8 @@ func TestJournalSurvivesAnUnwritableStore(t *testing.T) {
 	if err := os.WriteFile(blocked, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PKGX_DIR", filepath.Join(blocked, "store"))
-	t.Setenv("PKGX_JOURNAL", "")
+	t.Setenv("ZPKG_DIR", filepath.Join(blocked, "store"))
+	t.Setenv("ZPKG_JOURNAL", "")
 	recordFailure(errors.New("boom")) // must simply do nothing
 }
 
@@ -151,16 +151,16 @@ func TestJournalBoundsOneField(t *testing.T) {
 // none, and the command says so rather than printing an empty list.
 func TestJournalCanBeTurnedOff(t *testing.T) {
 	journalStore(t)
-	t.Setenv("PKGX_JOURNAL", "0")
+	t.Setenv("ZPKG_JOURNAL", "0")
 	recordFailure(errors.New("not recorded"))
 	if got := readJournal(journalPath()); len(got) != 0 {
-		t.Fatalf("PKGX_JOURNAL=0 still recorded %+v", got)
+		t.Fatalf("ZPKG_JOURNAL=0 still recorded %+v", got)
 	}
 	var out, errb strings.Builder
 	if code := runJournal(nil, &out, &errb); code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
-	if !strings.Contains(out.String(), "PKGX_JOURNAL is off") {
+	if !strings.Contains(out.String(), "ZPKG_JOURNAL is off") {
 		t.Errorf("the reason for the silence is not stated:\n%s", out.String())
 	}
 }

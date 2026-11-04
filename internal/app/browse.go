@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // Browsing the tree, and completing into it.
@@ -49,7 +49,7 @@ import (
 //
 // The protocol:
 //
-//	PKGX_GET_COMPLETIONS=<n> pkgx <arg0> <arg1> … <argN>
+//	ZPKG_GET_COMPLETIONS=<n> pkgx <arg0> <arg1> … <argN>
 //
 // prints one `value\tdescription` per line and exits 0. The description is
 // what zsh and fish show beside the candidate; bash ignores it.
@@ -77,16 +77,16 @@ import (
 //
 // Two sources, in order:
 //
-//	PKGX_CATALOG          a file somebody named: an air-gapped image that
+//	ZPKG_CATALOG          a file somebody named: an air-gapped image that
 //	                      ships one beside the store, or a catalogue being
 //	                      inspected before it is published. Set and
 //	                      unreadable is an ERROR, never a quiet fallback.
-//	$PKGX_DIR/catalog/…   what `pkgx catalog update` wrote.
+//	$ZPKG_DIR/catalog/…   what `pkgx catalog update` wrote.
 //
 // Absent is not an error: it is every fresh machine, and the caller falls
 // back to what is installed.
 var catalogFor = func() (bottle.Catalog, error) {
-	if p := os.Getenv("PKGX_CATALOG"); p != "" {
+	if p := os.Getenv("ZPKG_CATALOG"); p != "" {
 		b, err := osReadFile(p)
 		if err != nil {
 			return bottle.Catalog{}, err
@@ -132,7 +132,7 @@ func installedCatalog(dir string) bottle.Catalog {
 				vers = append(vers, strings.TrimPrefix(e.Name(), "v"))
 				continue
 			}
-			// A dot-directory is not a namespace. $PKGX_DIR holds at least
+			// A dot-directory is not a namespace. $ZPKG_DIR holds at least
 			// `.local/tmp`, and listing it as a root told the user there is
 			// a package family called `.local`.
 			if strings.HasPrefix(e.Name(), ".") {
@@ -168,7 +168,7 @@ func installedCatalog(dir string) bottle.Catalog {
 // — and `pkgx ls` would have no honest header to print. Which one answered
 // is returned, so the caller can say.
 func browseCatalog(dir string) (bottle.Catalog, string, error) {
-	named := os.Getenv("PKGX_CATALOG")
+	named := os.Getenv("ZPKG_CATALOG")
 	c, err := catalogFor()
 	if err != nil && named != "" {
 		// NAMED and unreadable is a user's mistake, not a reason to show
@@ -238,7 +238,7 @@ func runLs(args []string, stdout, stderr io.Writer) int {
 	}
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"ZPKG_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	// Two different falls back to the store, and they want two different
@@ -462,7 +462,7 @@ func lsNote(cat bottle.Catalog, n bottle.Node) string {
 
 // completionsEnv is the environment variable a shell sets to ask for
 // completions. Named after Nix's, because it is Nix's protocol.
-const completionsEnv = "PKGX_GET_COMPLETIONS"
+const completionsEnv = "ZPKG_GET_COMPLETIONS"
 
 // maybeComplete answers a completion request and reports whether it did.
 //
@@ -595,14 +595,14 @@ _@TOOL@_complete() {
     [ "$i" -lt "$COMP_CWORD" ] && n=$((n + 1))
   done
   local IFS=$'\n'
-  COMPREPLY=($(PKGX_GET_COMPLETIONS=$((COMP_CWORD - 1)) @TOOL@ "${words[@]:1}" 2>/dev/null | cut -f1))
+  COMPREPLY=($(ZPKG_GET_COMPLETIONS=$((COMP_CWORD - 1)) @TOOL@ "${words[@]:1}" 2>/dev/null | cut -f1))
 }
 complete -o nospace -F _@TOOL@_complete @TOOL@
 `,
 	"zsh": `# @TOOL@ completion — eval "$(pkgs completion zsh)"
 _@TOOL@_complete() {
   local -a lines
-  lines=(${(f)"$(PKGX_GET_COMPLETIONS=$((CURRENT - 1)) @TOOL@ ${words[2,-1]} 2>/dev/null)"})
+  lines=(${(f)"$(ZPKG_GET_COMPLETIONS=$((CURRENT - 1)) @TOOL@ ${words[2,-1]} 2>/dev/null)"})
   local -a vals descs
   local l
   for l in $lines; do
@@ -616,7 +616,7 @@ compdef _@TOOL@_complete @TOOL@
 	"fish": `# @TOOL@ completion — pkgs completion fish | source
 function __@TOOL@_complete
   set -l words (commandline -opc) (commandline -ct)
-  PKGX_GET_COMPLETIONS=(math (count $words) - 2) @TOOL@ $words[2..-1] 2>/dev/null
+  ZPKG_GET_COMPLETIONS=(math (count $words) - 2) @TOOL@ $words[2..-1] 2>/dev/null
 end
 complete -c @TOOL@ -f -a '(__@TOOL@_complete)'
 `,

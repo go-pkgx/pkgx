@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // ⛔⛔ THE RANKING IS STILL ON, now that nothing here switches it on.
@@ -11,7 +11,7 @@ import (
 // This is the one assertion worth keeping in pkgx. The list, and the tests
 // that guard its CONTENT — both halves recorded, no supported line marked
 // dead, lines rather than releases, a date that parses — moved to bottle with
-// the data (go-pkgx/bottle#186), because that is where the data is and two
+// the data (go-zpkg/bottle#186), because that is where the data is and two
 // copies are two answers waiting to disagree.
 //
 // What pkgx still has to answer is narrower and specific to this binary: when

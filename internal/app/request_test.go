@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 )
 
@@ -40,7 +40,7 @@ func withOCI(t *testing.T, f fakeOCI) {
 // machine whose owner was debugging rather than publishing.
 func TestTheReportCarriesNothingItWasNotGiven(t *testing.T) {
 	withOCI(t, fakeOCI{})
-	t.Setenv("PKGX_SECRET_LOOKING_THING", "stratuslab-token")
+	t.Setenv("ZPKG_SECRET_LOOKING_THING", "stratuslab-token")
 	var out, errb bytes.Buffer
 	if code := runRequest([]string{"--url", "opendev.org/openstack/python-openstackclient"}, &out, &errb); code != 0 {
 		t.Fatalf("code=%d %s", code, errb.String())
@@ -50,7 +50,7 @@ func TestTheReportCarriesNothingItWasNotGiven(t *testing.T) {
 	for _, forbidden := range []string{
 		"stratuslab",  // the user's domain, from their argv
 		"--domain",    // any argv at all
-		"PKGX_SECRET", // the environment
+		"ZPKG_SECRET", // the environment
 		"/Users/",     // a path, which carries the account name
 		"/home/",      //
 		"token",       //
@@ -69,7 +69,7 @@ func TestTheReportCarriesNothingItWasNotGiven(t *testing.T) {
 		t.Fatalf("the link does not parse: %v", err)
 	}
 	body := link.Query().Get("body")
-	for _, forbidden := range []string{"stratuslab", "--domain", "PKGX_SECRET", "/Users/", "/home/"} {
+	for _, forbidden := range []string{"stratuslab", "--domain", "ZPKG_SECRET", "/Users/", "/home/"} {
 		if strings.Contains(body, forbidden) {
 			t.Errorf("the issue body carries %q: %s", forbidden, body)
 		}
@@ -308,7 +308,7 @@ func TestGhcrsRefusalForAnAbsentRepositoryIsAnAbsence(t *testing.T) {
 func TestTheHintAppearsOnlyForAPackageThatIsNotHere(t *testing.T) {
 	const project = "opendev.org/openstack/python-openstackclient"
 	absent := &bottle.NotPublishedError{
-		Project: project, Registry: "ghcr.io", Repo: "go-pkgx/packages/…",
+		Project: project, Registry: "ghcr.io", Repo: "go-zpkg/packages/…",
 		Err: errors.New("403: denied"),
 	}
 

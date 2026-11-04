@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // The name index: the completion path's catalogue, in the form completion
@@ -153,7 +153,7 @@ func parseNameIndex(r io.Reader, jsonBytes int64) (bottle.Catalog, bool) {
 			//
 			//	../outside	1.0  ✓ 9.9.9
 			//
-			// and the `✓ 9.9.9` is a directory OUTSIDE $PKGX_DIR, reported as
+			// and the `✓ 9.9.9` is a directory OUTSIDE $ZPKG_DIR, reported as
 			// installed — because lsNote asks bottle.InstalledVersions, which
 			// does filepath.Join(dir, project). bottle.UnmarshalCatalog
 			// refuses that name outright ("has a `..` segment"); this reader
@@ -215,12 +215,12 @@ func parseNameIndexHeader(line string) (jsonBytes int64, count int, ok bool) {
 // dependencies and summaries, which the index does not carry, and none of them
 // runs on a keystroke.
 //
-// PKGX_CATALOG wins outright. Somebody who named a file is inspecting that
+// ZPKG_CATALOG wins outright. Somebody who named a file is inspecting that
 // file, and there is no index for it — answering from one built beside a
 // different catalogue would be the exact disagreement this file is careful
 // about.
 func completionCatalog(dir string) bottle.Catalog {
-	if os.Getenv("PKGX_CATALOG") == "" {
+	if os.Getenv("ZPKG_CATALOG") == "" {
 		osn, arch := bottle.HostSlug()
 		if cat, ok := indexFor(catalogNamesPath(osn, arch), catalogPath(osn, arch)); ok {
 			return cat

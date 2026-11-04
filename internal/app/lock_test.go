@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 func withLock(t *testing.T, d bottle.Lock, err error) {

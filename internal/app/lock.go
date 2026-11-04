@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // `pkgx --lock <file>` — run exactly what a lock pins.

@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // `pkgs request` — turn "this package is missing" into a report somebody can
@@ -18,7 +18,7 @@ import (
 //
 //	pkgx openstack user list --domain stratuslab
 //	pkgx: opendev.org/openstack/python-openstackclient is not published in
-//	      ghcr.io/go-pkgx/packages/… : 403: denied
+//	      ghcr.io/go-zpkg/packages/… : 403: denied
 //
 // Two problems in one line. The registry's 403 is ghcr saying "no such
 // repository" and reads as a permissions fault; and the person now has to
@@ -271,7 +271,7 @@ func (f requestFacts) issueURL() string {
 	q.Set("body", f.report()+
 		"\nAsked for with `"+tool+" request`, which sends nothing by itself:\n"+
 		"this text is the whole of what it collected.\n")
-	return "https://github.com/go-pkgx/packages/issues/new?" + q.Encode()
+	return "https://github.com/go-zpkg/packages/issues/new?" + q.Encode()
 }
 
 func hostPlatform() string {

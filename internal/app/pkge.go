@@ -141,11 +141,11 @@ const shellInit = `pkge() {
       [ -n "${PKGE_SPECS-}" ] && printf '%s\n' ${PKGE_SPECS} ;;
     save)
       [ -n "${1-}" ] || { echo "pkge save <name>" >&2; return 2; }
-      mkdir -p "${PKGX_DIR:-$HOME/.pkgx}/collections" &&
-      printf '%s\n' "${PKGE_SPECS-}" > "${PKGX_DIR:-$HOME/.pkgx}/collections/$1" ;;
+      mkdir -p "${ZPKG_DIR:-$HOME/.pkgx}/collections" &&
+      printf '%s\n' "${PKGE_SPECS-}" > "${ZPKG_DIR:-$HOME/.pkgx}/collections/$1" ;;
     restore)
       [ -n "${1-}" ] || { echo "pkge restore <name>" >&2; return 2; }
-      _pkge_f="${PKGX_DIR:-$HOME/.pkgx}/collections/$1"
+      _pkge_f="${ZPKG_DIR:-$HOME/.pkgx}/collections/$1"
       [ -r "$_pkge_f" ] || { echo "pkge: no collection $1" >&2; return 1; }
       pkge purge || return $?
       # shellcheck disable=SC2046

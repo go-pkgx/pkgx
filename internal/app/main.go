@@ -1,14 +1,14 @@
 // Command pkgx is a dependency-free, pure-Go implementation of the pkgx
 // runtime: it runs packages on the fly, materialising each one's full
 // dependency closure on demand — from the signed OCI registry
-// oci://ghcr.io/go-pkgx/packages by default, verifying each bottle's signature
+// oci://ghcr.io/go-zpkg/packages by default, verifying each bottle's signature
 // (fail-closed) — with no runtime deps of its own (a single CGO_ENABLED=0 binary
-// that works on a `FROM scratch` image). Point PKGX_DIST at the unsigned upstream
-// (https://dist.pkgx.dev) with PKGX_VERIFY=0 for the full pantry.
+// that works on a `FROM scratch` image). Point ZPKG_DIST at the unsigned upstream
+// (https://dist.pkgx.dev) with ZPKG_VERIFY=0 for the full pantry.
 //
 // It shares its whole bottle backend — resolution, download, FROM-scratch
 // closure completion, and loader-aware exec — with pkgm via the
-// github.com/go-pkgx/bottle package, so there is one source of truth.
+// github.com/go-zpkg/bottle package, so there is one source of truth.
 package app
 
 import (
@@ -22,13 +22,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // version is reported by `pkgx --version`. It defaults to "dev" and is
 // overridden at release-build time via
 //
-//	-ldflags "-X github.com/go-pkgx/pkgx/internal/app.version=<tag>"
+//	-ldflags "-X github.com/go-zpkg/zpkgx/internal/app.version=<tag>"
 //
 // ⛔ THE FULL IMPORT PATH, NOT `main.version`. This variable lived in
 // package main until the two binaries were split; the release workflow kept
@@ -111,16 +111,16 @@ asking ABOUT packages is pkgs, a separate command:
   long form of everything above.
 
 env:
-  PKGX_DIR     bottle store (default: ~/.pkgx)
-  PKGX_CATALOG read the catalogue from this file instead of $PKGX_DIR/catalog —
+  ZPKG_DIR     bottle store (default: ~/.pkgx)
+  ZPKG_CATALOG read the catalogue from this file instead of $ZPKG_DIR/catalog —
                for an air-gapped image, or to inspect one before publishing.
                Named and unreadable is an error, not a quiet fallback
-  PKGX_DIST    bottle source (default: oci://ghcr.io/go-pkgx/packages, the signed
+  ZPKG_DIST    bottle source (default: oci://ghcr.io/go-zpkg/packages, the signed
                registry; set https://dist.pkgx.dev for the full unsigned upstream
-               pantry — pair with PKGX_VERIFY=0)
-  PKGX_VERIFY  verify bottle signatures, fail-closed (default: on; set
+               pantry — pair with ZPKG_VERIFY=0)
+  ZPKG_VERIFY  verify bottle signatures, fail-closed (default: on; set
                0/false/no/off to disable)
-  PKGX_DEPRECATED
+  ZPKG_DEPRECATED
                a JSON file of end-of-life release lines per project, e.g.
                {"openssl.org": ["3.6"]}, which REPLACES the list built into
                this binary; {} turns the preference off. A version on a
@@ -128,8 +128,8 @@ env:
                lock still resolve to it and say so on stderr. Named and
                unreadable is an empty list and a warning, not a fall back
 
-  ~/.pkgx/config.hcl2 sets defaults for the PKGX_* / OCI_* variables above
-  (HCL2 attributes, e.g. PKGX_DIST = "oci://ghcr.io/go-pkgx/packages"). A real
+  ~/.pkgx/config.hcl2 sets defaults for the ZPKG_* / OCI_* variables above
+  (HCL2 attributes, e.g. ZPKG_DIST = "oci://ghcr.io/go-zpkg/packages"). A real
   environment variable always overrides a value set in the file.
 `
 
@@ -153,7 +153,7 @@ func Pkgx(argv []string) int { return run(argv) }
 // variable exists so the wrong name cannot be printed by accident: there is
 // one place to set it, and both mains set it before anything runs.
 //
-// Only the PROGRAM NAME uses it. `~/.pkgx/config.hcl2`, `PKGX_DIR` and the
+// Only the PROGRAM NAME uses it. `~/.pkgx/config.hcl2`, `ZPKG_DIR` and the
 // rest are paths and variables shared by both binaries, and they keep the
 // spelling the filesystem and the environment use.
 var tool = "pkgx"
@@ -275,7 +275,7 @@ func run(argv []string) int {
 	// foreign platform's closure there.
 	graphOS, graphArch, argv, err := splitPlatform(format, argv)
 	if err == nil {
-		err = graphCatalogClash(format, os.Getenv("PKGX_CATALOG"))
+		err = graphCatalogClash(format, os.Getenv("ZPKG_CATALOG"))
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "pkgx:", err)
@@ -478,7 +478,7 @@ func splitPlatform(format outputFormat, argv []string) (osn, arch string, rest [
 	return osn, arch, argv[2:], nil
 }
 
-// graphCatalogClash refuses `--graph` while PKGX_CATALOG names a file.
+// graphCatalogClash refuses `--graph` while ZPKG_CATALOG names a file.
 //
 // ⛔ THE VARIABLE HAS NOTHING TO REDIRECT HERE, AND THE SILENCE WAS THE
 // DEFECT. `ls`, `search` and `why` read that file and refuse it loudly when
@@ -486,13 +486,13 @@ func splitPlatform(format outputFormat, argv []string) (osn, arch string, rest [
 // unreadable is an error, not a quiet fallback". `--graph` resolves against
 // the REGISTRY and never opens it, so before this:
 //
-//	PKGX_CATALOG=/nope/absent.json pkgx ls go.dev        exit 1, names the file
-//	PKGX_CATALOG=/nope/absent.json pkgx --graph +go.dev  exit 0, host's answer
+//	ZPKG_CATALOG=/nope/absent.json pkgx ls go.dev        exit 1, names the file
+//	ZPKG_CATALOG=/nope/absent.json pkgx --graph +go.dev  exit 0, host's answer
 //
 // Setting it to another platform's catalogue and asking `--graph` returned
 // this machine's resolution, confidently, with nothing to distinguish the two
-// answers. That is how go-pkgx/packages#323 was nearly read as unblocked when
-// it is not. See go-pkgx/pkgx#110.
+// answers. That is how go-zpkg/packages#323 was nearly read as unblocked when
+// it is not. See go-zpkg/pkgx#110.
 //
 // A refusal rather than a warning, because a warning on stderr is missed in
 // exactly the place this matters — a script that reads the tree. And a
@@ -504,7 +504,7 @@ func graphCatalogClash(format outputFormat, catalog string) error {
 	if format != formatGraph || catalog == "" {
 		return nil
 	}
-	return fmt.Errorf("PKGX_CATALOG names %s, and --graph does not read a catalogue — it resolves against the registry. To ask about another platform: --graph --platform os/arch", catalog)
+	return fmt.Errorf("ZPKG_CATALOG names %s, and --graph does not read a catalogue — it resolves against the registry. To ask about another platform: --graph --platform os/arch", catalog)
 }
 
 // splitPlus separates leading "+pkg" tokens from the remainder. A lone "--"
@@ -719,7 +719,7 @@ var findLoader = bottle.FindLoader
 //
 // So on darwin a bottle's own rpaths are the ONLY mechanism: there is no
 // environment fallback behind them. That is why an unresolvable @rpath there
-// is fatal rather than merely untidy, and why go-pkgx/bk#125 had to repair the
+// is fatal rather than merely untidy, and why go-zpkg/bk#125 had to repair the
 // bottles instead of widening a search path. Setting DYLD_LIBRARY_PATH would
 // paper over exactly the defect that campaign exists to find, and SIP strips
 // DYLD_* when exec'ing a protected binary in any case.
@@ -920,7 +920,7 @@ func resolveBin(runProject, program string, binDirs []string, closure []bottle.R
 		// The version, because a recipe may name its binary after it —
 		// apache.org/apr-util provides only `bin/apu-{{ version.major }}-config`,
 		// and without the version that name is looked up with the moustache
-		// still in it. go-pkgx/bottle#75 taught BinNames to expand; this is the
+		// still in it. go-zpkg/bottle#75 taught BinNames to expand; this is the
 		// caller that has the version to expand WITH.
 		return bottle.ResolveBinPath(filepath.Join(prefix, "bin",
 			bottle.PrimaryBinFor(runProject, provides, versionOf(runProject, closure)))), nil
@@ -1129,7 +1129,7 @@ func composeEnv(closure []bottle.Resolved, dir string) composed {
 	// The bottle puts libc.so.6 in `lib/glibc-2.44/`, and `lib/` holds nothing
 	// else, so `<prefix>/lib` alone exports a directory with no shared object
 	// in it. In a FROM-scratch tree that is fatal — there is no system libc
-	// behind it, and go-pkgx/bk#272 was every sovereign build dying on its
+	// behind it, and go-zpkg/bk#272 was every sovereign build dying on its
 	// first `mkdir`.
 	//
 	// Adding it unconditionally is WORSE, and I shipped that first. On a
@@ -1167,7 +1167,7 @@ func composeEnv(closure []bottle.Resolved, dir string) composed {
 	//	ld.lld: error: undefined symbol: ceil, floor, pow, fmod, atan2, …
 	//	❌ BUILD FAIL perl.org 5.44.0
 	//
-	// on the linux/s390x generation-1 pilot (go-pkgx/packages#316). A probe
+	// on the linux/s390x generation-1 pilot (go-zpkg/packages#316). A probe
 	// that cannot find a library concludes the library is absent, which is
 	// indistinguishable from a correct answer until something needs it.
 	//
@@ -1358,7 +1358,7 @@ func writeModulefile(c composed, stdout io.Writer) error {
 // separate rust-lang.org/cargo project it names in `companions:`. A recipe that
 // declares rust-lang.org and then runs `cargo` is correct against upstream pkgx
 // and used to die here with `"cargo": executable file not found in $PATH`
-// (go-pkgx/bottle#65). 74 of the pantry's 1899 recipes declare the key.
+// (go-zpkg/bottle#65). 74 of the pantry's 1899 recipes declare the key.
 //
 // NAMED roots only, deliberately. Following companions of the whole resolved
 // closure would widen every environment by whatever its transitive dependencies

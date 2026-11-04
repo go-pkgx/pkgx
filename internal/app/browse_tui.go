@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 	"golang.org/x/term"
 )
 
@@ -60,7 +60,7 @@ func runBrowse(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"ZPKG_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	if len(cat.Projects) == 0 {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 func commandCatalog() bottle.Catalog {
@@ -150,7 +150,7 @@ func TestAnUnknownCommandPointsAtSearch(t *testing.T) {
 
 // ⛔ No catalogue is its OWN message, not the pantry's. This is the defect in
 // the field report: `pkgx hugo version` answered "no recipe for hugo in
-// …pantry…", which reads as "go-pkgx does not know hugo" when the truth is
+// …pantry…", which reads as "go-zpkg does not know hugo" when the truth is
 // "this store has no catalogue yet".
 func TestNoCatalogueSaysToUpdateItRatherThanBlamingThePantry(t *testing.T) {
 	withCatalog(t, bottle.Catalog{}, errors.New("open …/catalog: no such file or directory"))

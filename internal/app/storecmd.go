@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // `pkgx store` — what is on this disk, which nothing could show.
@@ -16,7 +16,7 @@ import (
 // # WHY
 //
 // Every ephemeral `pkgx <pkg>` leaves its bottles in
-// $PKGX_DIR/<project>/v<version>, and nothing ever removes one. `pkgm list`
+// $ZPKG_DIR/<project>/v<version>, and nothing ever removes one. `pkgm list`
 // answers a different question — what did I ask to have installed — and a
 // bottle pulled to run one command six months ago is in neither.
 //

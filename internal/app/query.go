@@ -5,7 +5,7 @@ import (
 	"io"
 	"sort"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // `pkgx -Q` — upstream's query mode, which this fork had never implemented.
@@ -28,8 +28,8 @@ func runQuery(args []string, stdout, stderr io.Writer) int {
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
 		// Same treatment the other readers give it: a named and unreadable
-		// PKGX_CATALOG is an error, not a quiet fallback.
-		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		// ZPKG_CATALOG is an error, not a quiet fallback.
+		fmt.Fprintf(stderr, pfx()+"ZPKG_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	if len(cat.Projects) == 0 {

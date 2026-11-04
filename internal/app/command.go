@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // Resolving the COMMAND a person knows to the project that provides it.
 //
 // # The report
 //
-// From a colleague on 2026-10-12, replacing pkgx 2.10.3 with go-pkgx on a
+// From a colleague on 2026-10-12, replacing pkgx 2.10.3 with go-zpkg on a
 // macOS arm64 workstation for a Slurm-on-OpenStack deployment. Seven tools
 // tried — go, terraform, tofu, hugo, gh, task, openstack — and the short
 // program name failed for every one of them:
@@ -91,7 +91,7 @@ func (m *commandMapper) resolve(s string) (string, string, error) {
 		// ⛔ NOT the pantry's "no recipe for hugo" message. A bare word is
 		// never a project, so going on to look for a project called `hugo`
 		// can only produce an error about the wrong thing — which is exactly
-		// what the report ran into, and why it reads as "go-pkgx does not
+		// what the report ran into, and why it reads as "go-zpkg does not
 		// know hugo" rather than "this store has no catalogue yet".
 		return "", "", fmt.Errorf("%q is a command, not a project, and there is no catalogue to look it up in — run: pkgs catalog update", cmd)
 	}

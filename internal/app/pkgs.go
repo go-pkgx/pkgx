@@ -73,7 +73,7 @@ usage:
                                      pinned — so pkgx +$(pkgs browse) composes
   pkgs catalog                       which catalogue is here, and how old
   pkgs catalog update                fetch the catalogue of what this platform
-                                     has, into $PKGX_DIR/catalog. THE ONLY
+                                     has, into $ZPKG_DIR/catalog. THE ONLY
                                      command that asks the registry what
                                      exists; ls and <TAB> then read the file,
                                      so they are instant and work offline
@@ -94,7 +94,7 @@ usage:
                                      packages this registry did not have, most
                                      asked for first. A local file, written on
                                      failure and read by you. It SENDS NOTHING
-                                     either; PKGX_JOURNAL=0 records nothing
+                                     either; ZPKG_JOURNAL=0 records nothing
   pkgs catalog platforms             which platforms the registry publishes a
                                      catalogue for, one per line, ready to hand
                                      back to --platform. Asks the registry: no
@@ -130,18 +130,18 @@ usage:
   "pkgx node@22 --version", "pkgx +gnu.org/make -- build.sh", "pkgx -Q git".
 
 env:
-  PKGX_DIR     bottle store (default: ~/.pkgx)
-  PKGX_CATALOG read the catalogue from this file instead of $PKGX_DIR/catalog —
+  ZPKG_DIR     bottle store (default: ~/.pkgx)
+  ZPKG_CATALOG read the catalogue from this file instead of $ZPKG_DIR/catalog —
                for an air-gapped image, or to inspect one before publishing.
                Named and unreadable is an error, not a quiet fallback
-  PKGX_DIST    bottle source (default: oci://ghcr.io/go-pkgx/packages)
-  PKGX_VERIFY  verify bottle signatures, fail-closed (default: on)
-  PKGX_DEPRECATED
+  ZPKG_DIST    bottle source (default: oci://ghcr.io/go-zpkg/packages)
+  ZPKG_VERIFY  verify bottle signatures, fail-closed (default: on)
+  ZPKG_DEPRECATED
                a JSON file of end-of-life release lines per project, which
                REPLACES the list built into this binary; {} turns it off.
                "pkgs compat" resolves, so it reads the same list pkgx does
 
-  The variables keep the PKGX_ spelling: they name a store and a registry
+  The variables keep the ZPKG_ spelling: they name a store and a registry
   that both binaries share, not a program.
 `
 

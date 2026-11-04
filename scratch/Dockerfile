@@ -16,10 +16,10 @@ COPY pkgs /pkgs
 COPY catalog/ /store/catalog/
 
 # The store a real user has. The catalogue is read from
-# $PKGX_DIR/catalog/<os>-<arch>.json, which is the path tab-completion's name
-# index is keyed on. PKGX_CATALOG names a file instead and deliberately
+# $ZPKG_DIR/catalog/<os>-<arch>.json, which is the path tab-completion's name
+# index is keyed on. ZPKG_CATALOG names a file instead and deliberately
 # bypasses that index (internal/app/nameindex.go), so an image built around
 # it would measure the slow path and report it as the fast one.
-ENV PKGX_DIR=/store
+ENV ZPKG_DIR=/store
 
 ENTRYPOINT ["/pkgs"]

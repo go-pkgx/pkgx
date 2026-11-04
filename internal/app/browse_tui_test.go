@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 func browseCat() bottle.Catalog {
@@ -213,7 +213,7 @@ func TestBrowseWithNoCatalogue(t *testing.T) {
 	// An EMPTY STORE too: browseCatalog falls back to what is installed
 	// when the catalogue has no projects, and without this the test read
 	// the developer's own ~/.pkgx and found plenty.
-	t.Setenv("PKGX_DIR", t.TempDir())
+	t.Setenv("ZPKG_DIR", t.TempDir())
 	withCatalog(t, bottle.Catalog{Generated: "2026-10-06T09:00:00Z"}, nil)
 	var errb bytes.Buffer
 	if code := runBrowse(nil, bytes.NewReader(nil), &bytes.Buffer{}, &errb); code != 1 {

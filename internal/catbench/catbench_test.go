@@ -59,7 +59,7 @@ func TestCatalogPathComesFromTheBinary(t *testing.T) {
 	// called catalog. The completion being measured is still pkgx's.
 	bin := filepath.Join(dir, "pkgx")
 	stager := filepath.Join(dir, "pkgs")
-	for _, b := range []struct{ out, pkg string }{{bin, "."}, {stager, "./cmd/pkgs"}} {
+	for _, b := range []struct{ out, pkg string }{{bin, "."}, {stager, "./cmd/zpkgs"}} {
 		build := exec.Command("go", "build", "-o", b.out, b.pkg)
 		build.Dir = root
 		build.Stderr = os.Stderr
@@ -84,7 +84,7 @@ func TestCatalogPathComesFromTheBinary(t *testing.T) {
 	if err := os.WriteFile(got, []byte(cat), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	d, out := once(arm{"t", bin, []string{"PKGX_DIR=" + store, "PKGX_DIST=" + blackhole}})
+	d, out := once(arm{"t", bin, []string{"ZPKG_DIR=" + store, "ZPKG_DIST=" + blackhole}})
 	if !strings.Contains(out, "gnu.org/") {
 		t.Errorf("the arm read no catalogue: %q", out)
 	}
@@ -92,7 +92,7 @@ func TestCatalogPathComesFromTheBinary(t *testing.T) {
 	// the blackhole makes any connection attempt take seconds, so this
 	// separates "did not connect" from "connected quickly".
 	if d > 2*time.Second {
-		t.Errorf("a completion took %v with PKGX_DIST blackholed: it connected", d)
+		t.Errorf("a completion took %v with ZPKG_DIST blackholed: it connected", d)
 	}
 }
 

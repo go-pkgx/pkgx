@@ -4,7 +4,7 @@ package app
 // people, and the reason `module load cfd` can mean something without a
 // hand-written modulefile behind it.
 //
-//	# ~/.pkgx/environments/site.hcl2      (or $PKGX_DIR/environments/*.hcl2)
+//	# ~/.pkgx/environments/site.hcl2      (or $ZPKG_DIR/environments/*.hcl2)
 //	env "cfd" {
 //	  description = "the solver stack, as validated on 2026-09-01"
 //	  packages    = ["openmpi.org@5", "hdf5.org", "python.org@3.12"]
@@ -72,7 +72,7 @@ var envBodySchema = &hcl.BodySchema{
 // user's own file wins over a site's.
 func environmentDirs(pkgxDir, home string) []string {
 	var dirs []string
-	if v := os.Getenv("PKGX_ENVIRONMENTS"); v != "" {
+	if v := os.Getenv("ZPKG_ENVIRONMENTS"); v != "" {
 		dirs = append(dirs, filepath.SplitList(v)...)
 	}
 	if pkgxDir != "" {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // fixture is the diamond that makes the point: two packages need z, and only
@@ -285,9 +285,9 @@ func TestSplitPlatform(t *testing.T) {
 	}
 }
 
-// ⛔ PKGX_CATALOG is refused by --graph, not ignored. `ls`, `search` and
+// ⛔ ZPKG_CATALOG is refused by --graph, not ignored. `ls`, `search` and
 // `why` read that file and refuse it loudly when it cannot be read; --graph
-// resolves against the registry and never opens it, so before go-pkgx/pkgx#110
+// resolves against the registry and never opens it, so before go-zpkg/pkgx#110
 // it answered for the HOST with exit 0 whatever the variable named.
 func TestGraphRefusesPkgxCatalog(t *testing.T) {
 	for _, c := range []struct {
