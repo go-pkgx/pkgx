@@ -522,7 +522,7 @@ The line that prompted it, from a user on 2026-10-22:
 ```console
 $ pkgx openstack user list --domain stratuslab
 pkgx: opendev.org/openstack/python-openstackclient is not published in
-      ghcr.io/go-zpkg/packages/… : response status code 403: denied
+      ghcr.io/go-pkgx/packages/… : response status code 403: denied
 ```
 
 Two problems in one line. The **403 is ghcr saying "no such repository"** and
@@ -823,7 +823,7 @@ completion framework, no python, and no generator to run.
 
 ```
 GET /v2/_catalog                             403   (ghcr issues no token)
-GET /v2/go-zpkg/packages/zlib.net/tags/list  200   ["1.3.2", …]
+GET /v2/go-pkgx/packages/zlib.net/tags/list  200   ["1.3.2", …]
 ```
 
 Versions, yes; projects, no. So the registry carries a **catalogue**, which
@@ -1007,7 +1007,7 @@ about the network**:
 
 ```
 control ok: catalog update refused as it must — pkgs: catalog update:
-resolve go-zpkg.github.io/catalog v1: … dial udp 192.168.65.7:53: connect:
+resolve go-pkgx.dev/catalog v1: … dial udp 192.168.65.7:53: connect:
 network is unreachable
 ```
 
@@ -1295,9 +1295,13 @@ round-trips arbitrary modulefiles through the converter and a real HCL parser
 ## Environment
 
 - `ZPKG_DIR` — bottle store (default `~/.pkgx`)
-- `ZPKG_DIST` — bottle source (default `oci://ghcr.io/go-zpkg/packages`, the signed
+- `ZPKG_DIST` — bottle source (default `oci://ghcr.io/go-pkgx/packages`, the signed
   registry; set `https://dist.pkgx.dev` for the full unsigned upstream pantry —
-  pair with `ZPKG_VERIFY=0`)
+  pair with `ZPKG_VERIFY=0`).
+  The `go-pkgx` in that URL is a **deployment fact, not our name**: GitHub's
+  container packages are org-scoped and did not follow the repository
+  transfer, so the repositories moved to `go-zpkg` and every bottle stayed.
+  It changes when the bottles are copied, not before
 - `ZPKG_VERIFY` — verify bottle signatures, fail-closed (default on; set
   `0`/`false`/`no`/`off` to disable)
 - `ZPKG_DEPRECATED` — a JSON file of end-of-life release lines per project,
@@ -1319,7 +1323,7 @@ environment variable always overrides a value set here:
 ```hcl2
 # ~/.pkgx/config.hcl2 — defaults for the go-zpkg tools.
 # A real environment variable always overrides a value set here.
-ZPKG_DIST   = "oci://ghcr.io/go-zpkg/packages"  # signed registry (default)
+ZPKG_DIST   = "oci://ghcr.io/go-pkgx/packages"  # signed registry (default)
 ZPKG_VERIFY = true                               # fail-closed signature check
 # ZPKG_DIR    = "/opt/pkgx"
 # ZPKG_PANTRY = "https://raw.githubusercontent.com/pkgxdev/pantry/main/projects"

@@ -1,7 +1,7 @@
 // Command zpkgx is a dependency-free, pure-Go implementation of the zpkgx
 // runtime: it runs packages on the fly, materialising each one's full
 // dependency closure on demand — from the signed OCI registry
-// oci://ghcr.io/go-zpkg/packages by default, verifying each bottle's signature
+// oci://ghcr.io/go-pkgx/packages by default, verifying each bottle's signature
 // (fail-closed) — with no runtime deps of its own (a single CGO_ENABLED=0 binary
 // that works on a `FROM scratch` image). Point ZPKG_DIST at the unsigned upstream
 // (https://dist.pkgx.dev) with ZPKG_VERIFY=0 for the full pantry.
@@ -115,7 +115,7 @@ env:
   ZPKG_CATALOG read the catalogue from this file instead of $ZPKG_DIR/catalog —
                for an air-gapped image, or to inspect one before publishing.
                Named and unreadable is an error, not a quiet fallback
-  ZPKG_DIST    bottle source (default: oci://ghcr.io/go-zpkg/packages, the signed
+  ZPKG_DIST    bottle source (default: oci://ghcr.io/go-pkgx/packages, the signed
                registry; set https://dist.pkgx.dev for the full unsigned upstream
                pantry — pair with ZPKG_VERIFY=0)
   ZPKG_VERIFY  verify bottle signatures, fail-closed (default: on; set
@@ -129,7 +129,7 @@ env:
                unreadable is an empty list and a warning, not a fall back
 
   ~/.pkgx/config.hcl2 sets defaults for the ZPKG_* / OCI_* variables above
-  (HCL2 attributes, e.g. ZPKG_DIST = "oci://ghcr.io/go-zpkg/packages"). A real
+  (HCL2 attributes, e.g. ZPKG_DIST = "oci://ghcr.io/go-pkgx/packages"). A real
   environment variable always overrides a value set in the file.
 `
 

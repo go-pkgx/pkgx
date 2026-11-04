@@ -134,7 +134,7 @@ env:
   ZPKG_CATALOG read the catalogue from this file instead of $ZPKG_DIR/catalog —
                for an air-gapped image, or to inspect one before publishing.
                Named and unreadable is an error, not a quiet fallback
-  ZPKG_DIST    bottle source (default: oci://ghcr.io/go-zpkg/packages)
+  ZPKG_DIST    bottle source (default: oci://ghcr.io/go-pkgx/packages)
   ZPKG_VERIFY  verify bottle signatures, fail-closed (default: on)
   ZPKG_DEPRECATED
                a JSON file of end-of-life release lines per project, which

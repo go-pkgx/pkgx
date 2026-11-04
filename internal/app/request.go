@@ -18,7 +18,7 @@ import (
 //
 //	zpkgx openstack user list --domain stratuslab
 //	zpkgx: opendev.org/openstack/python-openstackclient is not published in
-//	      ghcr.io/go-zpkg/packages/… : 403: denied
+//	      ghcr.io/go-pkgx/packages/… : 403: denied
 //
 // Two problems in one line. The registry's 403 is ghcr saying "no such
 // repository" and reads as a permissions fault; and the person now has to
