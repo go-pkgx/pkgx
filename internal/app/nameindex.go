@@ -42,7 +42,7 @@ import (
 // A derived file that can disagree with its source is a defect waiting for a
 // reader. Three things keep this one honest:
 //
-//   - It is written by `pkgx catalog update` ONLY, in the same operation that
+//   - It is written by `zpkgx catalog update` ONLY, in the same operation that
 //     writes the JSON. Nothing else produces it.
 //   - Its header records the JSON's BYTE SIZE and the number of projects.
 //     Both are checked on read, and both are free — a Stat and a line count.
@@ -57,13 +57,13 @@ import (
 // carries no dependencies, which is why it is 8% of the file.
 
 // nameIndexVersion is the format version in the header. An unknown version is
-// refused — and refused means "fall back to the JSON", so a future pkgx
+// refused — and refused means "fall back to the JSON", so a future zpkgx
 // writing a v2 index cannot be misread by this one.
 const nameIndexVersion = 1
 
 // nameIndexMagic opens the header, so a file that is not this is not parsed as
 // though it were.
-const nameIndexMagic = "#pkgx-names"
+const nameIndexMagic = "#zpkgx-names"
 
 // catalogNamesPath is the index beside the catalogue it describes.
 func catalogNamesPath(osn, arch string) string {
@@ -99,7 +99,7 @@ func writeNameIndex(path string, cat bottle.Catalog, jsonBytes int64) error {
 // be used.
 //
 // The second return is `false` for every doubt — absent, truncated, a version
-// this pkgx does not know, a size or count that disagrees with the JSON beside
+// this zpkgx does not know, a size or count that disagrees with the JSON beside
 // it. There is no error to report, because the caller's answer to all of them
 // is the same: read the JSON instead.
 func readNameIndex(indexPath, jsonPath string) (bottle.Catalog, bool) {
@@ -187,7 +187,7 @@ func parseNameIndex(r io.Reader, jsonBytes int64) (bottle.Catalog, bool) {
 	return cat, true
 }
 
-// parseNameIndexHeader reads `#pkgx-names <ver> <jsonBytes> <projects>`.
+// parseNameIndexHeader reads `#zpkgx-names <ver> <jsonBytes> <projects>`.
 func parseNameIndexHeader(line string) (jsonBytes int64, count int, ok bool) {
 	fields := strings.Fields(strings.TrimRight(line, "\n"))
 	if len(fields) != 4 || fields[0] != nameIndexMagic {
@@ -211,7 +211,7 @@ func parseNameIndexHeader(line string) (jsonBytes int64, count int, ok bool) {
 // completionCatalog is the catalogue the COMPLETION path reads, and the only
 // caller of the index.
 //
-// `pkgx ls`, `--tree`, `search` and `browse` keep reading the JSON: they need
+// `zpkgx ls`, `--tree`, `search` and `browse` keep reading the JSON: they need
 // dependencies and summaries, which the index does not carry, and none of them
 // runs on a keystroke.
 //

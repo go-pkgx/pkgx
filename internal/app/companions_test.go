@@ -114,7 +114,7 @@ func TestCompanionDoesNotOverwriteAnAskedForConstraint(t *testing.T) {
 	}
 }
 
-// A root that is not a project at all — `pkgx ./x.py` — must not be reported as
+// A root that is not a project at all — `zpkgx ./x.py` — must not be reported as
 // a companions problem. The resolver rejects the name properly a moment later;
 // leading with "could not read ./x.py's companions" blames the wrong thing.
 func TestUnresolvableRootIsSilentHere(t *testing.T) {

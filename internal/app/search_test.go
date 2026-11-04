@@ -73,7 +73,7 @@ func TestSearchMarksWhatYouHave(t *testing.T) {
 	}
 }
 
-// Nothing found exits NON-ZERO and says so on stderr, so `pkgx search x ||
+// Nothing found exits NON-ZERO and says so on stderr, so `zpkgx search x ||
 // echo none` works and a pipeline is not fed a reassuring silence.
 func TestSearchWithNoResults(t *testing.T) {
 	withCatalog(t, cmdCatalog(), nil)
@@ -123,7 +123,7 @@ func TestSearchSaysWhenTheCatalogueCannotAnswer(t *testing.T) {
 
 // ⛔ THE REAL CASE, AND IT IS THE ONE WITH RESULTS.
 //
-// Measured 2026-10-20 against the published catalogue: `pkgs search json`
+// Measured 2026-10-20 against the published catalogue: `zpkgs search json`
 // returns THIRTEEN projects and none of them is `stedolan.github.io/jq`. jq
 // is in that catalogue, with the command `jq` and a bottle for this
 // platform — the word "json" is simply in neither its path nor its
@@ -140,7 +140,7 @@ func TestASearchWithResultsStillSaysWhatItCouldNotRead(t *testing.T) {
 	if !strings.Contains(errb.String(), "carry a description") {
 		t.Errorf("a search WITH results says nothing about the prose it could not read: %q", errb.String())
 	}
-	// ⛔ ON STDERR. `pkgs search x > list` must write results and nothing
+	// ⛔ ON STDERR. `zpkgs search x > list` must write results and nothing
 	// else, or the note breaks every caller to make a point.
 	if strings.Contains(out.String(), "carry a description") {
 		t.Errorf("the note landed on stdout: %q", out.String())
@@ -222,13 +222,13 @@ func TestSearchIsReachable(t *testing.T) {
 	var code int
 	out := captureStdout(t, func() { code = Pkgs([]string{"search", "rg"}) })
 	if code != 0 || !strings.Contains(out, "crates.io/ripgrep") {
-		t.Errorf("pkgs search rg = %d, %q", code, out)
+		t.Errorf("zpkgs search rg = %d, %q", code, out)
 	}
-	if !strings.Contains(pkgsUsage, "pkgs search") {
-		t.Error("pkgs usage does not mention search")
+	if !strings.Contains(zpkgsUsage, "zpkgs search") {
+		t.Error("zpkgs usage does not mention search")
 	}
-	if !strings.Contains(usage, "pkgs search") {
-		t.Error("pkgx usage does not point at pkgs search")
+	if !strings.Contains(usage, "zpkgs search") {
+		t.Error("zpkgx usage does not point at zpkgs search")
 	}
 	found := false
 	for _, c := range completionsFor("sea") {
@@ -237,7 +237,7 @@ func TestSearchIsReachable(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("`pkgx sea<TAB>` does not offer search")
+		t.Error("`zpkgx sea<TAB>` does not offer search")
 	}
 	// An empty query is a usage error, not a listing of everything.
 	if code := runSearch(nil, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {

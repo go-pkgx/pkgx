@@ -9,15 +9,15 @@ import (
 	"github.com/go-zpkg/bottle"
 )
 
-// `pkgs request` — turn "this package is missing" into a report somebody can
+// `zpkgs request` — turn "this package is missing" into a report somebody can
 // act on, WITHOUT sending anything.
 //
 // # WHY THIS SHAPE
 //
 // The thing that prompted it, verbatim from a user on 2026-10-22:
 //
-//	pkgx openstack user list --domain stratuslab
-//	pkgx: opendev.org/openstack/python-openstackclient is not published in
+//	zpkgx openstack user list --domain stratuslab
+//	zpkgx: opendev.org/openstack/python-openstackclient is not published in
 //	      ghcr.io/go-zpkg/packages/… : 403: denied
 //
 // Two problems in one line. The registry's 403 is ghcr saying "no such
@@ -86,12 +86,12 @@ func runRequest(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// sayHowToAsk points at `pkgs request` when a run failed because the
+// sayHowToAsk points at `zpkgs request` when a run failed because the
 // package is simply not here.
 //
 // ⛔ THE DEAD END IS THE DEFECT. The user who prompted this ran
 //
-//	pkgx openstack user list --domain stratuslab
+//	zpkgx openstack user list --domain stratuslab
 //
 // and got ghcr's 403, which names no next step and reads as a permissions
 // fault. The package existed in the pantry and we had never built it — a
@@ -102,7 +102,7 @@ func runRequest(args []string, stdout, stderr io.Writer) int {
 // bottle.IsNotPublished, whose last resort reads the error's TEXT — and
 // its first live run fired on
 //
-//	pkgx: command not found in the requested packages: true
+//	zpkgx: command not found in the requested packages: true
 //
 // where the package was published and the COMMAND was missing. A hint that
 // appears on unrelated failures teaches people to ignore hints.
@@ -125,13 +125,13 @@ func sayHowToAsk(err error, stderr io.Writer) {
 		return
 	}
 	fmt.Fprintf(stderr, "%sif it should be here: `%s request %s` prints a report you can open as an issue (it sends nothing)\n",
-		pfx(), pkgsTool, project)
+		pfx(), zpkgsTool, project)
 }
 
-// pkgsTool is the sibling binary's name. `tool` is whichever of the two is
-// running, and the verb lives in pkgs — so a pkgx user must be sent there
-// by name rather than to a verb pkgx does not have.
-const pkgsTool = "pkgs"
+// zpkgsTool is the sibling binary's name. `tool` is whichever of the two is
+// running, and the verb lives in zpkgs — so a zpkgx user must be sent there
+// by name rather than to a verb zpkgx does not have.
+const zpkgsTool = "zpkgs"
 
 // requestFacts is the whole payload. Every field is here on purpose and
 // there is no map, no "extra" and no free text from the environment: a
@@ -139,7 +139,7 @@ const pkgsTool = "pkgs"
 // promise about what is sent can be checked.
 type requestFacts struct {
 	project   string
-	platform  string // the host, in pkgx's spelling
+	platform  string // the host, in zpkgx's spelling
 	version   string // this tool's version
 	published bool   // already here for this platform
 	newest    string // the newest version tagged, whoever can use it
@@ -229,7 +229,7 @@ func (f requestFacts) report() string {
 	case f.published:
 		// ⛔ "PUBLISHED FOR THIS PLATFORM" ANSWERS A QUESTION NOBODY ASKED.
 		// Measured on myself, 2026-10-23: having rebuilt vitejs.dev to close
-		// six advisories, I ran `pkgs request vitejs.dev` to check the
+		// six advisories, I ran `zpkgs request vitejs.dev` to check the
 		// remedy had landed and got exactly that line — true, and silent
 		// about the one thing I needed, WHICH VERSION. I went to the
 		// registry by hand for a fact this command already held.

@@ -20,7 +20,7 @@ func browseLoop(b *browser, f *os.File, stdout, stderr io.Writer) int {
 		// Not fatal: a terminal that refuses raw mode still reads fine
 		// line by line, and refusing to run would be worse than a browser
 		// that needs Enter.
-		fmt.Fprintln(stderr, "pkgx: this terminal will not go raw; press Enter after each key")
+		fmt.Fprintln(stderr, "zpkgx: this terminal will not go raw; press Enter after each key")
 	} else {
 		defer func() { _ = termRestore(fd, old) }()
 	}
@@ -42,7 +42,7 @@ func browseLoop(b *browser, f *os.File, stdout, stderr io.Writer) int {
 		}
 	}
 	// The screen is chrome and goes to stderr; the PINS are the result and
-	// go to stdout, so `pkgx +$(pkgx browse)` composes. A browser whose
+	// go to stdout, so `zpkgx +$(zpkgx browse)` composes. A browser whose
 	// decoration reached stdout would put its own borders on a command
 	// line.
 	fmt.Fprint(stderr, "\x1b[H\x1b[2J")

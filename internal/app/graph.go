@@ -23,7 +23,7 @@ var graphFor = bottle.GraphFor
 // ⛔ THE PLATFORM IS A PARAMETER. bottle.GraphFor always took one; only this
 // function pinned it to the host, and that single line made the question
 // "what would a linux machine resolve for this set?" unanswerable from a mac
-// — the same defect, in the same shape, as go-zpkg/pkgx#106 found in
+// — the same defect, in the same shape, as go-zpkg/zpkgx#106 found in
 // `catalog update`.
 //
 // It is not cosmetic. A recipe asking for `go.dev ^1.27.1` resolves to 1.27.1

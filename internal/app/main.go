@@ -1,4 +1,4 @@
-// Command pkgx is a dependency-free, pure-Go implementation of the pkgx
+// Command zpkgx is a dependency-free, pure-Go implementation of the zpkgx
 // runtime: it runs packages on the fly, materialising each one's full
 // dependency closure on demand — from the signed OCI registry
 // oci://ghcr.io/go-zpkg/packages by default, verifying each bottle's signature
@@ -7,7 +7,7 @@
 // (https://dist.pkgx.dev) with ZPKG_VERIFY=0 for the full pantry.
 //
 // It shares its whole bottle backend — resolution, download, FROM-scratch
-// closure completion, and loader-aware exec — with pkgm via the
+// closure completion, and loader-aware exec — with zpkgm via the
 // github.com/go-zpkg/bottle package, so there is one source of truth.
 package app
 
@@ -25,7 +25,7 @@ import (
 	"github.com/go-zpkg/bottle"
 )
 
-// version is reported by `pkgx --version`. It defaults to "dev" and is
+// version is reported by `zpkgx --version`. It defaults to "dev" and is
 // overridden at release-build time via
 //
 //	-ldflags "-X github.com/go-zpkg/zpkgx/internal/app.version=<tag>"
@@ -40,74 +40,74 @@ import (
 // could not, because the build info was right.
 var version = "dev"
 
-var usage = `pkgx ` + version + ` — pure-Go pkgx runtime
+var usage = `zpkgx ` + version + ` — pure-Go zpkgx runtime
 
 usage:
-  pkgx <pkg>[@version] [arg...]      run a package's program ephemerally
-                                     e.g. pkgx node@22 --version
-  pkgx +<pkg> [+<pkg>...] cmd [...]  bring packages into the environment and
+  zpkgx <pkg>[@version] [arg...]      run a package's program ephemerally
+                                     e.g. zpkgx node@22 --version
+  zpkgx +<pkg> [+<pkg>...] cmd [...]  bring packages into the environment and
                                      run cmd with them on PATH/LD_LIBRARY_PATH
-                                     e.g. pkgx +git +gnu.org/bash -- build.sh
-  pkgx +<pkg> [+<pkg>...]            print the environment those packages bring,
-                                     for eval "$(pkgx +gnu.org/make +llvm.org)"
-  pkgx --json +<pkg>...              the same environment as JSON, for a tool
+                                     e.g. zpkgx +git +gnu.org/bash -- build.sh
+  zpkgx +<pkg> [+<pkg>...]            print the environment those packages bring,
+                                     for eval "$(zpkgx +gnu.org/make +llvm.org)"
+  zpkgx --json +<pkg>...              the same environment as JSON, for a tool
                                      that composes it (see --modulefile)
-  pkgx --modulefile +<pkg>...        the same environment as an Lmod modulefile,
+  zpkgx --modulefile +<pkg>...        the same environment as an Lmod modulefile,
                                      so an HPC site keeps its module command
-  pkgx --lock <file> [cmd ...]       run exactly the versions a "bk lock" file
+  zpkgx --lock <file> [cmd ...]       run exactly the versions a "bk lock" file
                                      pins — every pin, not just its roots, so
                                      a set that cannot be satisfied exactly
                                      FAILS rather than materialising something
                                      near it. With no command, prints that
                                      environment, as +<pkg> does
-  pkgx --graph +<pkg>...             the resolved dependency graph: every
+  zpkgx --graph +<pkg>...             the resolved dependency graph: every
                                      version, and which demand decided it.
                                      Resolves only — nothing is downloaded
-  pkgx --graph --platform os/arch +<pkg>...
+  zpkgx --graph --platform os/arch +<pkg>...
                                      the same, for a platform you are not on:
                                      what a linux machine would resolve, asked
                                      from a mac. A version that exists but has
                                      no bottle THERE is named as such, which
                                      is the answer a recipe author needs
-  pkgx -Q [command]                  what can be run: with a command, the
+  zpkgx -Q [command]                  what can be run: with a command, the
                                      project(s) that provide it, one per line
                                      and exit 1 if none does; with nothing,
                                      every command the catalogue carries.
                                      Reads the catalogue, so no network
-  pkgx --quiet|--silent|-q|-s …      accepted for upstream compatibility, and
+  zpkgx --quiet|--silent|-q|-s …      accepted for upstream compatibility, and
                                      they change NOTHING here: this
                                      implementation prints no progress, so
                                      there is none to suppress. They are taken
                                      because real scripts pass them — the
-                                     shebang of upstream's own pkgm does — and
+                                     shebang of upstream's own zpkgm does — and
                                      such a script must not break on the day
-                                     this binary is the pkgx on PATH
-  pkgx -h, --help                    show this help
-  pkgx -v, --version                 show version
+                                     this binary is the zpkgx on PATH
+  zpkgx -h, --help                    show this help
+  zpkgx -v, --version                 show version
 
-asking ABOUT packages is pkgs, a separate command:
-  pkgs ls [--tree] [node]            what is available under a node, and what
+asking ABOUT packages is zpkgs, a separate command:
+  zpkgs ls [--tree] [node]            what is available under a node, and what
                                      a package needs
-  pkgs ls --dependents <pkg>         the other direction: who NEEDS this
-  pkgs why <project> <dependency>    the shortest path by which one needs the
+  zpkgs ls --dependents <pkg>         the other direction: who NEEDS this
+  zpkgs why <project> <dependency>    the shortest path by which one needs the
                                      other
-  pkgs search [-n N] <text>          find a package by name or by a command it
+  zpkgs search [-n N] <text>          find a package by name or by a command it
                                      provides
-  pkgs browse [node]                 walk the tree full-screen
-  pkgs request [--url] <project>     a package is missing: what the registry
+  zpkgs browse [node]                 walk the tree full-screen
+  zpkgs request [--url] <project>     a package is missing: what the registry
                                      has, as a report you can open as an
                                      issue. Sends nothing by itself
-  pkgs journal [-n N] [--clear]      what has failed here and how often, most
+  zpkgs journal [-n N] [--clear]      what has failed here and how often, most
                                      asked for first. Local; sends nothing
-  pkgs catalog [update|reindex]      which catalogue is here; update fetches
+  zpkgs catalog [update|reindex]      which catalogue is here; update fetches
                                      one, and takes --platform os/arch
-  pkgs store [--by-size] [--root …]  what this disk holds, and what it is for
-  pkgs compat +<pin>... -- <pkg>...  how much of a set resolves under a base
-  pkgs env init|avail|show|import    environments, and the pkge front-end
-  pkgs completion bash|zsh|fish      <TAB> completion, for both commands
+  zpkgs store [--by-size] [--root …]  what this disk holds, and what it is for
+  zpkgs compat +<pin>... -- <pkg>...  how much of a set resolves under a base
+  zpkgs env init|avail|show|import    environments, and the zpkge front-end
+  zpkgs completion bash|zsh|fish      <TAB> completion, for both commands
 
-  They are two commands because the first word after pkgx is a PACKAGE, as
-  it is upstream: "pkgx ls" runs gnu.org/coreutils' ls. "pkgs -h" has the
+  They are two commands because the first word after zpkgx is a PACKAGE, as
+  it is upstream: "zpkgx ls" runs gnu.org/coreutils' ls. "zpkgs -h" has the
   long form of everything above.
 
 env:
@@ -133,22 +133,36 @@ env:
   environment variable always overrides a value set in the file.
 `
 
-// Pkgx is the `pkgx` command: everything below, behind a function the two
+// Pkgx is the `zpkgx` command: everything below, behind a function the two
 // binaries in this module can call.
 //
-// ⛔ THE CODE IS SHARED AND THE GRAMMARS ARE NOT. `pkgx` takes a PACKAGE as
-// its first positional, as upstream pkgx does, while `pkgs` takes a VERB —
+// ⛔ THE CODE IS SHARED AND THE GRAMMARS ARE NOT. `zpkgx` takes a PACKAGE as
+// its first positional, as upstream zpkgx does, while `zpkgs` takes a VERB —
 // and the resolution, the catalogue reading and the store walking underneath
 // are one implementation, not two. That is the whole reason this package
 // exists rather than a second repository: a fork of the resolver is a fork of
 // what a version means.
 func Pkgx(argv []string) int { return run(argv) }
 
-// tool is the binary the user actually typed — "pkgx" or "pkgs" — and it is
+// tool is the binary the user actually typed — "zpkgx" or "zpkgs" — and it is
 // what every diagnostic and usage line in this package names.
 //
+// ⛔⛔ IT MUST NOT SAY `zpkgx`, AND AFTER THE RENAME THAT IS NO LONGER MERELY
+// WRONG — IT IS AMBIGUOUS. Upstream's `zpkgx` is a different program that can
+// now sit on the same PATH, which is the whole point of renaming ours: the
+// collision is gone. A binary called `zpkgx` that answers `zpkgx dev` to
+// `--version`, and prefixes its errors `zpkgx:`, hands the reader somebody
+// else's program by name. Measured on this machine after the rename:
+//
+//	$ zpkgx --version
+//	zpkgx dev
+//
+// Every diagnostic in this package goes through pfx(), so one variable fixes
+// all of them — and the version line, which did NOT go through it, is the one
+// that got it wrong.
+//
 // ⛔ NOT A COSMETIC. Two binaries ship from one package, and a message that
-// says "pkgx: usage: pkgx catalog update" when the reader typed `pkgs
+// says "zpkgx: usage: zpkgx catalog update" when the reader typed `zpkgs
 // catalog` sends them to a command that no longer has that verb. The
 // variable exists so the wrong name cannot be printed by accident: there is
 // one place to set it, and both mains set it before anything runs.
@@ -156,7 +170,7 @@ func Pkgx(argv []string) int { return run(argv) }
 // Only the PROGRAM NAME uses it. `~/.pkgx/config.hcl2`, `ZPKG_DIR` and the
 // rest are paths and variables shared by both binaries, and they keep the
 // spelling the filesystem and the environment use.
-var tool = "pkgx"
+var tool = "zpkgx"
 
 // pfx is the prefix every diagnostic in this package carries: the binary the
 // user typed, then a colon and a space.
@@ -186,7 +200,7 @@ func bottleWarn() {
 // is a var so tests can drive the startup-warning path.
 var configError = bottle.ConfigError
 
-// setupRootfs poses the pkgx loader at the canonical PT_INTERP path; a var so a
+// setupRootfs poses the zpkgx loader at the canonical PT_INTERP path; a var so a
 // test can observe the call without writing to the host's /lib.
 var setupRootfs = bottle.SetupScratchRootfs
 
@@ -217,14 +231,14 @@ func run(argv []string) int {
 	}
 
 	// ⛔ UPSTREAM'S VERBOSITY FLAGS, BEFORE argv[0] IS READ AS A PACKAGE.
-	// Without this, `pkgx --quiet deno^2.1 …` — which is the SHEBANG of
-	// upstream's own `pkgm` — came back as
+	// Without this, `zpkgx --quiet deno^2.1 …` — which is the SHEBANG of
+	// upstream's own `zpkgm` — came back as
 	//
-	//	pkgx: no project declares the command "--quiet" — try: pkgs search --quiet
+	//	zpkgx: no project declares the command "--quiet" — try: zpkgs search --quiet
 	//
 	// so it did not merely fail, it misdiagnosed: the flag was looked up as a
-	// command name. Reported 2026-10-31 by someone whose `sudo pkgm install`
-	// broke because the `pkgx` on PATH was this one. See stripVerbosity.
+	// command name. Reported 2026-10-31 by someone whose `sudo zpkgm install`
+	// broke because the `zpkgx` on PATH was this one. See stripVerbosity.
 	argv = stripVerbosity(argv)
 	if len(argv) == 0 {
 		fmt.Print(usage)
@@ -236,7 +250,8 @@ func run(argv []string) int {
 		fmt.Print(usage)
 		return 0
 	case "-v", "--version":
-		fmt.Println("pkgx " + version)
+		// `tool`, not a literal: `zpkgs --version` printed "zpkgx …" too.
+		fmt.Println(tool + " " + version)
 		return 0
 	case "-Q", "--query":
 		// Upstream's query mode, which this fork had never implemented —
@@ -245,13 +260,13 @@ func run(argv []string) int {
 		return runQuery(argv[1:], os.Stdout, os.Stderr)
 	}
 
-	// ⛔ NO VERBS HERE ANY MORE. `pkgx ls` runs gnu.org/coreutils' ls again,
-	// as upstream does, and the nine verbs moved to `pkgs` (see pkgs.go).
+	// ⛔ NO VERBS HERE ANY MORE. `zpkgx ls` runs gnu.org/coreutils' ls again,
+	// as upstream does, and the nine verbs moved to `zpkgs` (see zpkgs.go).
 	// A word that is one of theirs AND is not a package gets told where it
 	// went, once, instead of failing with "no such package".
 	// ⛔ BEFORE unknownVerb, because unknownVerb deliberately stays silent
 	// for a word a package provides — and `env` is provided by
-	// gnu.org/coreutils, which is exactly why a stale pkge profile gets
+	// gnu.org/coreutils, which is exactly why a stale zpkge profile gets
 	// coreutils' error instead of a pointer. See staleEnvCall.
 	if code, said := staleEnvCall(argv, os.Stderr); said {
 		return code
@@ -260,12 +275,12 @@ func run(argv []string) int {
 		return code
 	}
 
-	// `--lock` BEFORE the format split, so `pkgx --lock f.hcl --graph`
+	// `--lock` BEFORE the format split, so `zpkgx --lock f.hcl --graph`
 	// reads as "the graph of what this lock pins" rather than as a package
 	// called --lock.
 	lockPath, argv, err := splitLock(argv)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "pkgx:", err)
+		fmt.Fprintln(os.Stderr, "zpkgx:", err)
 		return 2
 	}
 	format, argv := splitFormat(argv)
@@ -278,7 +293,7 @@ func run(argv []string) int {
 		err = graphCatalogClash(format, os.Getenv("ZPKG_CATALOG"))
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "pkgx:", err)
+		fmt.Fprintln(os.Stderr, "zpkgx:", err)
 		return 2
 	}
 	plus, rest := splitPlus(argv)
@@ -288,37 +303,37 @@ func run(argv []string) int {
 			// freshly against pinned ones — a third thing that is neither
 			// locked nor free, and whichever way it went somebody would be
 			// surprised.
-			fmt.Fprintln(os.Stderr, "pkgx: --lock is the whole set; drop the +pkg, or drop the lock")
+			fmt.Fprintln(os.Stderr, "zpkgx: --lock is the whole set; drop the +pkg, or drop the lock")
 			return 2
 		}
 		d, err := loadLock(lockPath, os.Stderr)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "pkgx:", err)
+			fmt.Fprintln(os.Stderr, "zpkgx:", err)
 			return 1
 		}
 		plus = lockedSpecs(d)
 		if len(plus) == 0 {
-			fmt.Fprintf(os.Stderr, "pkgx: %s pins nothing\n", lockPath)
+			fmt.Fprintf(os.Stderr, "zpkgx: %s pins nothing\n", lockPath)
 			return 1
 		}
 	}
 	if format != formatShell && (len(plus) == 0 || len(rest) > 0) {
-		fmt.Fprintln(os.Stderr, "pkgx: --json and --modulefile describe a package set: give +pkg and no command")
+		fmt.Fprintln(os.Stderr, "zpkgx: --json and --modulefile describe a package set: give +pkg and no command")
 		return 2
 	}
-	// `pkgx +a +b` with no command is consumed as `eval "$(pkgx +a +b)"` — the
+	// `zpkgx +a +b` with no command is consumed as `eval "$(zpkgx +a +b)"` — the
 	// idiom this program's own --help recommends. A command substitution
 	// DISCARDS the exit status of what it ran, so the shell only ever sees
 	// `eval` of whatever reached stdout. With an error that left stdout empty,
 	// that is `eval ""`, which SUCCEEDS:
 	//
-	//	$ eval "$(pkgx +gnome.org/glib +freedesktop.org/fontconfig)"; echo $?
-	//	pkgx: no version of gnu.org/gettext satisfies "^1" AND "^0.21" …
+	//	$ eval "$(zpkgx +gnome.org/glib +freedesktop.org/fontconfig)"; echo $?
+	//	zpkgx: no version of gnu.org/gettext satisfies "^1" AND "^0.21" …
 	//	0
 	//
 	// The diagnostic is on stderr where it belongs and cannot corrupt the
 	// capture, but the script carries on as though the packages were loaded.
-	// (`pkge load` does not have this problem: the shell function it installs
+	// (`zpkge load` does not have this problem: the shell function it installs
 	// captures to a variable and checks with `|| return $?` before eval'ing.)
 	//
 	// So the output of that form is buffered and released only on success, and
@@ -333,7 +348,7 @@ func run(argv []string) int {
 		out = &held
 	}
 	if err := exec(plus, rest, format, graphOS, graphArch, out); err != nil {
-		fmt.Fprintln(os.Stderr, "pkgx: "+err.Error())
+		fmt.Fprintln(os.Stderr, "zpkgx: "+err.Error())
 		sayHowToAsk(err, os.Stderr)
 		// Recorded at the SAME site the hint is printed from, so the
 		// journal's idea of a failure cannot drift from what the user was
@@ -352,13 +367,13 @@ func run(argv []string) int {
 	return 0
 }
 
-// outputFormat selects how `pkgx +a +b` renders the environment it composed.
+// outputFormat selects how `zpkgx +a +b` renders the environment it composed.
 // The three renderings are the SAME data: one resolution, one closure, one set
 // of variables. A second code path that recomputed any of it would drift.
 type outputFormat int
 
 const (
-	formatShell      outputFormat = iota // export lines, for eval "$(pkgx +a)"
+	formatShell      outputFormat = iota // export lines, for eval "$(zpkgx +a)"
 	formatJSON                           // the composed environment as data
 	formatModulefile                     // an Lmod modulefile (Lua)
 	formatGraph                          // the resolved dependency graph, for a person
@@ -380,11 +395,11 @@ const (
 // ineffective. It does NOT make it silent: the usage text says so in the line
 // that documents it.
 //
-// The alternative is worse than a documented no-op. Upstream pkgx has
+// The alternative is worse than a documented no-op. Upstream zpkgx has
 // `--quiet`, `--silent`, `-q`, `-s`, and real scripts in the wild pass them —
-// including the shebang of upstream's own `pkgm`, which is how this was found.
+// including the shebang of upstream's own `zpkgm`, which is how this was found.
 // Refusing them means any such script breaks the moment this binary is the
-// `pkgx` on PATH, and it breaks with a message about a missing *command*.
+// `zpkgx` on PATH, and it breaks with a message about a missing *command*.
 // Compatibility with a flag we have nothing to do about costs one branch; the
 // drop-in claim in the usage text is worth more than that.
 //
@@ -393,7 +408,7 @@ const (
 //
 // # What upstream accepts, and what this takes
 //
-// Read from pkgxdev/pkgx `crates/cli/src/args.rs` (Rust, 2026-10-31): the long
+// Read from pkgxdev/zpkgx `crates/cli/src/args.rs` (Rust, 2026-10-31): the long
 // forms `--quiet` and `--silent`, and single-dash CLUSTERS of `q h s j v ! Q C`
 // where a second `q` upgrades quiet to silent.
 //
@@ -455,7 +470,7 @@ func splitFormat(argv []string) (outputFormat, []string) {
 // other rendering composes an environment for THIS machine — it puts real
 // paths on PATH and a real loader in place — so a foreign platform cannot
 // change the answer, and a flag that is silently without effect is worse
-// than one that is absent: `pkgx --json --platform linux/x86-64 +go.dev`
+// than one that is absent: `zpkgx --json --platform linux/x86-64 +go.dev`
 // would print the host's environment and look like it had honoured the
 // request.
 //
@@ -486,13 +501,13 @@ func splitPlatform(format outputFormat, argv []string) (osn, arch string, rest [
 // unreadable is an error, not a quiet fallback". `--graph` resolves against
 // the REGISTRY and never opens it, so before this:
 //
-//	ZPKG_CATALOG=/nope/absent.json pkgx ls go.dev        exit 1, names the file
-//	ZPKG_CATALOG=/nope/absent.json pkgx --graph +go.dev  exit 0, host's answer
+//	ZPKG_CATALOG=/nope/absent.json zpkgx ls go.dev        exit 1, names the file
+//	ZPKG_CATALOG=/nope/absent.json zpkgx --graph +go.dev  exit 0, host's answer
 //
 // Setting it to another platform's catalogue and asking `--graph` returned
 // this machine's resolution, confidently, with nothing to distinguish the two
 // answers. That is how go-zpkg/packages#323 was nearly read as unblocked when
-// it is not. See go-zpkg/pkgx#110.
+// it is not. See go-zpkg/zpkgx#110.
 //
 // A refusal rather than a warning, because a warning on stderr is missed in
 // exactly the place this matters — a script that reads the tree. And a
@@ -531,9 +546,9 @@ func splitPlus(argv []string) (plus, rest []string) {
 // exec materialises the requested packages and runs the target program with
 // every package's bin dir on PATH and the combined closure on LD_LIBRARY_PATH.
 //
-//   - `pkgx <pkg> args`      -> plus empty, rest=[pkg, args...]; run pkg's
+//   - `zpkgx <pkg> args`      -> plus empty, rest=[pkg, args...]; run pkg's
 //     primary program (its declared bin matching the project leaf).
-//   - `pkgx +a +b [cmd...]`  -> materialise a and b; run cmd resolved from
+//   - `zpkgx +a +b [cmd...]`  -> materialise a and b; run cmd resolved from
 //     their bin dirs (or, with no cmd, the primary program of the last +pkg).
 //
 // graphOS and graphArch are the platform `--graph` resolves for. Empty means
@@ -547,12 +562,12 @@ func exec(plus, rest []string, format outputFormat, graphOS, graphArch string, s
 	var runProject, program string
 	var args []string
 
-	// A bare word is a COMMAND, not a project: `pkgx hugo version` means
+	// A bare word is a COMMAND, not a project: `zpkgx hugo version` means
 	// gohugo.io. Resolved here rather than deeper down because the closure
 	// takes project names, and the mapper reads the catalogue only if some
 	// spec actually needs it — see command.go.
 	//
-	// On BOTH paths. `pkgx +hugo -- hugo version` is the same request in the
+	// On BOTH paths. `zpkgx +hugo -- hugo version` is the same request in the
 	// other syntax, and a flag added to one of a pair is the half-a-pair
 	// defect this fleet has paid for before.
 	cmds := &commandMapper{dir: dir}
@@ -579,7 +594,7 @@ func exec(plus, rest []string, format outputFormat, graphOS, graphArch string, s
 			program, args = rest[0], rest[1:]
 		}
 		// No command: print the environment these packages bring, the
-		// `eval "$(pkgx +a +b)"` contract (see envMode below).
+		// `eval "$(zpkgx +a +b)"` contract (see envMode below).
 	}
 
 	// Materialise every requested package's complete FROM-scratch closure.
@@ -601,15 +616,15 @@ func exec(plus, rest []string, format outputFormat, graphOS, graphArch string, s
 	}
 	libPath := bottle.LibPath(closure, dir)
 
-	// `pkgx +a +b` with no command prints the environment those packages bring,
-	// for `eval "$(pkgx +a +b)"` — the contract bk's generated build script
+	// `zpkgx +a +b` with no command prints the environment those packages bring,
+	// for `eval "$(zpkgx +a +b)"` — the contract bk's generated build script
 	// depends on, and the reason a build can source its toolchain without a
 	// system package manager.
 	if len(plus) > 0 && runProject == "" && program == "" {
 		// The caller is about to run the packages' own binaries (a build script
-		// after `eval "$(pkgx +deps)"`), so the loader has to be in place first:
+		// after `eval "$(zpkgx +deps)"`), so the loader has to be in place first:
 		// on a FROM-scratch image there is no /lib/ld-linux-* until we pose the
-		// pkgx glibc one. Best-effort — on a normal host it is already there.
+		// zpkgx glibc one. Best-effort — on a normal host it is already there.
 		if bottle.GOOS() == "linux" {
 			if loader := bottle.FindLoader(dir); loader != "" {
 				setupRootfs(loader, "")
@@ -638,7 +653,7 @@ func exec(plus, rest []string, format outputFormat, graphOS, graphArch string, s
 	//
 	// yt-dlp is a python script whose shebang reads `#!/usr/bin/env python`. It
 	// has python in its closure and got `env: python: No such file or directory`,
-	// because only yt-dlp's own bin was on PATH. `pkgx +yt-dlp.org` with no
+	// because only yt-dlp's own bin was on PATH. `zpkgx +yt-dlp.org` with no
 	// command already printed the full closure PATH — the run form simply
 	// composed a different one.
 	env := poseThenCompose(closure, dir, libPath)
@@ -656,17 +671,17 @@ func exec(plus, rest []string, format outputFormat, graphOS, graphArch string, s
 // exists, so on a FROM-scratch image the child was handed an LD_LIBRARY_PATH
 // with no libc in it:
 //
-//	$ pkgx stedolan.github.io/jq -n '1+1'
+//	$ zpkgx stedolan.github.io/jq -n '1+1'
 //	…/jq: error while loading shared libraries: libm.so.6: cannot open
 //	shared object file: No such file or directory
 //
 // Measured 2026-10-09, and proved by supplying the same path from outside the
 // container, which makes the identical command print 2. Every ELF was
 // affected, not one package: `+gnu.org/coreutils -- env` died the same way on
-// libc.so.6, and `pkgx --lock` could not run a lock at all.
+// libc.so.6, and `zpkgx --lock` could not run a lock at all.
 //
 // The `+pkg` print path already did it in this order. That is what made the
-// defect so quiet: `pkgx +jq` printed a COMPLETE environment while `pkgx jq`
+// defect so quiet: `zpkgx +jq` printed a COMPLETE environment while `zpkgx jq`
 // ran with an incomplete one, so reading the two outputs side by side showed
 // nothing wrong with either.
 func poseThenCompose(closure []bottle.Resolved, dir, libPath string) []string {
@@ -698,7 +713,7 @@ var posesLoader = func() bool { return bottle.GOOS() == "linux" }
 //	--- FAIL: TestTheLoaderIsPosedBeforeTheEnvironmentIsComposed
 //	    both steps did not run: [ask]
 //
-// which is also the fact worth stating: on those architectures pkgx poses
+// which is also the fact worth stating: on those architectures zpkgx poses
 // nothing, and the ordering this file exists for is a no-op.
 var findLoader = bottle.FindLoader
 
@@ -759,7 +774,7 @@ func runEnv(closure []bottle.Resolved, dir, libPath string) []string {
 //	PERL5LIB: "{{prefix}}/lib/perl5:$PERL5LIB"
 //
 // and bottle keeps that `$PERL5LIB` verbatim, because the SHELL expands it in
-// `eval "$(pkgx +…)"`. There is no shell in the run form: exec hands the block
+// `eval "$(zpkgx +…)"`. There is no shell in the run form: exec hands the block
 // to the program as it stands, so an unexpanded value arrives as the literal
 // characters `$PERL5LIB` on the end of a path list. Measured on yt-dlp, whose
 // PYTHONPATH reached python as `…/site-packages:$PYTHONPATH`.
@@ -851,20 +866,20 @@ func versionOf(project string, closure []bottle.Resolved) string {
 	return ""
 }
 
-// runTarget reads the first word of `pkgx <word> args...` and says which
+// runTarget reads the first word of `zpkgx <word> args...` and says which
 // project to materialise, under what constraint, and which PROGRAM to run.
 //
 // ⛔ IT RETURNS THE PROGRAM, and that is the whole reason it is a function.
 // The two lines it holds used to sit inline in exec, where no test could
 // reach them without materialising a closure and exec'ing something — so a
-// mutation that dropped the program survived the suite, and `pkgx ls` went
+// mutation that dropped the program survived the suite, and `zpkgx ls` went
 // back to running coreutils' `[` with nothing to say so. Measured: the
 // mutation "bare command not remembered" was NOT caught before this split.
 //
-// A bare word is a COMMAND: `pkgx ls` must run ls, not the first binary
+// A bare word is a COMMAND: `zpkgx ls` must run ls, not the first binary
 // gnu.org/coreutils happens to provide. A dotted or slashed word is a
 // PROJECT and names no command, so the program is empty and the caller
-// keeps the primary-program behaviour — `pkgx gnu.org/bash` runs bash.
+// keeps the primary-program behaviour — `zpkgx gnu.org/bash` runs bash.
 func runTarget(word string, cmds *commandMapper) (project, constraint, program string, err error) {
 	proj, cons, err := cmds.resolve(word)
 	if err != nil {
@@ -877,7 +892,7 @@ func runTarget(word string, cmds *commandMapper) (project, constraint, program s
 }
 
 // projectOf is `project`, named apart so runTarget reads as what it does.
-// `project` strips a version constraint: the word in `pkgx ls@9` is ls.
+// `project` strips a version constraint: the word in `zpkgx ls@9` is ls.
 func projectOf(spec string) string { return project(spec) }
 
 // resolveBin finds the absolute path of the binary to exec: a project's primary
@@ -887,17 +902,17 @@ func projectOf(spec string) string { return project(spec) }
 func resolveBin(runProject, program string, binDirs []string, closure []bottle.Resolved, dir string) (string, error) {
 	// ⛔ THE WORD THE USER TYPED WINS OVER THE PROJECT'S PRIMARY BINARY.
 	//
-	// `pkgx ls --version` resolves the COMMAND ls to gnu.org/coreutils, and
+	// `zpkgx ls --version` resolves the COMMAND ls to gnu.org/coreutils, and
 	// before this it then ran that project's primary program — which for
 	// coreutils is `[`. The output was GNU coreutils' own version banner,
 	// correct-looking and from the wrong program:
 	//
-	//	$ pkgx ls --version
+	//	$ zpkgx ls --version
 	//	[ (GNU coreutils) 9.11
 	//	Written by Kevin Braunsdorf and Matthew Bradburn
 	//
-	// Nobody had met it because `ls` used to be a pkgx subcommand and never
-	// reached this path at all. Splitting `pkgs` out gave the word back to
+	// Nobody had met it because `ls` used to be a zpkgx subcommand and never
+	// reached this path at all. Splitting `zpkgs` out gave the word back to
 	// the registry and uncovered it.
 	if runProject != "" && program != "" {
 		prefix := bottle.PrefixOf(runProject, closure, dir)
@@ -925,7 +940,7 @@ func resolveBin(runProject, program string, binDirs []string, closure []bottle.R
 		return bottle.ResolveBinPath(filepath.Join(prefix, "bin",
 			bottle.PrimaryBinFor(runProject, provides, versionOf(runProject, closure)))), nil
 	}
-	// An explicit path runs as itself — `pkgx +gnu.org/glibc -- /usr/local/bin/bk`
+	// An explicit path runs as itself — `zpkgx +gnu.org/glibc -- /usr/local/bin/bk`
 	// brings the packages into the environment for a program that is NOT one of
 	// them, which is how a tool gets a runtime on a FROM-scratch image.
 	if strings.ContainsRune(program, os.PathSeparator) {
@@ -946,7 +961,7 @@ func resolveBin(runProject, program string, binDirs []string, closure []bottle.R
 
 // runELF execs the target binary. On linux it arranges the pkgx glibc loader so
 // the binary (and any children) resolve on a scratch image — the same mechanism
-// pkgm's `run` uses. On darwin and windows there is no such loader dance: the
+// zpkgm's `run` uses. On darwin and windows there is no such loader dance: the
 // binary is exec'd directly (Windows resolves its DLLs from the exe dir + PATH,
 // which runEnv has already populated).
 func runELF(binPath string, args, env []string, libPath, dir string) error {
@@ -962,18 +977,18 @@ func runELF(binPath string, args, env []string, libPath, dir string) error {
 	return bottle.Exec(binPath, append([]string{binPath}, args...), env)
 }
 
-// --- pkgspec parsing (project[@constraint] | project<op>version) -----------
+// --- zpkgspec parsing (project[@constraint] | project<op>version) -----------
 
 // verDelims are the characters that end a project name and begin its version
-// constraint. A pkgspec pins a version either with "@" (`gnu.org/gawk@5.3`) or
+// constraint. A zpkgspec pins a version either with "@" (`gnu.org/gawk@5.3`) or
 // by appending a range operator directly to the project name (`cmake.org^3`,
-// `gnu.org/gmp>=6`) — both forms are pkgx syntax, and a pantry dependency map
+// `gnu.org/gmp>=6`) — both forms are zpkgx syntax, and a pantry dependency map
 // such as `invisible-island.net/ncurses: ^6` renders as the second one. No
 // project name contains any of these characters, so the FIRST occurrence marks
 // the boundary.
 const verDelims = "@^~<>="
 
-// splitSpec cuts a pkgspec into its project and its constraint. The constraint
+// splitSpec cuts a zpkgspec into its project and its constraint. The constraint
 // keeps its operator ("^6", ">=6") because that is what bottle's version
 // matcher consumes; the "@" form carries no operator, so it is dropped. A spec
 // with no constraint matches any version ("*").
@@ -1033,7 +1048,7 @@ type envVar struct {
 }
 
 // envMode prints the environment a package set brings, in the requested
-// rendering — what `eval "$(pkgx +a +b)"` consumes, what a module generator
+// rendering — what `eval "$(zpkgx +a +b)"` consumes, what a module generator
 // reads, or a modulefile an HPC site can install. It covers the WHOLE closure
 // (dependencies included), so a compiler invoked afterwards finds every
 // dependency's headers, libraries and pkg-config files.
@@ -1065,7 +1080,7 @@ func envMode(closure []bottle.Resolved, dir string, format outputFormat, stdout 
 // composeEnv computes what the closure contributes.
 //
 // Note lib64: a bottle built on x86-64 may install its libraries and .pc files
-// under lib64 rather than lib. Upstream pkgx only exports lib/pkgconfig, which
+// under lib64 rather than lib. Upstream zpkgx only exports lib/pkgconfig, which
 // is why a linux/x86-64 build of wget could not find openssl through
 // pkg-config. Both are exported here.
 func composeEnv(closure []bottle.Resolved, dir string) composed {
@@ -1140,7 +1155,7 @@ func composeEnv(closure []bottle.Resolved, dir string) composed {
 	//	mkdir: symbol lookup error: …/glibc-2.44/libc.so.6: undefined symbol:
 	//	__pointer_chk_guard, version GLIBC_PRIVATE
 	//
-	// which took the s390x seed lane down. `pkgx -- cmd` never had the problem
+	// which took the s390x seed lane down. `zpkgx -- cmd` never had the problem
 	// because it hands bottle.LibPath to OUR loader as --library-path and runs
 	// both halves from the same build; only the exported environment can pair
 	// them wrongly.
@@ -1300,7 +1315,7 @@ var modulePrepend = regexp.MustCompile(`^(.*):\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$`
 // not the command people type. This gives them signed, content-addressed,
 // closure-complete prefixes with the front-end they already have.
 func writeModulefile(c composed, stdout io.Writer) error {
-	fmt.Fprintln(stdout, "-- Generated by pkgx --modulefile. Do not edit: regenerate.")
+	fmt.Fprintln(stdout, "-- Generated by zpkgx --modulefile. Do not edit: regenerate.")
 	fmt.Fprintln(stdout, "--")
 	fmt.Fprintln(stdout, "-- The closure this module puts on PATH, with the exact version of each")
 	fmt.Fprintln(stdout, "-- member. Every prefix is content-addressed and immutable, so a module")
@@ -1310,7 +1325,7 @@ func writeModulefile(c composed, stdout io.Writer) error {
 	}
 	fmt.Fprintln(stdout)
 	if len(c.Closure) > 0 {
-		fmt.Fprintf(stdout, "whatis(%q)\n\n", "pkgx closure rooted at "+c.Closure[0].Project+" "+c.Closure[0].Version)
+		fmt.Fprintf(stdout, "whatis(%q)\n\n", "zpkgx closure rooted at "+c.Closure[0].Project+" "+c.Closure[0].Version)
 	}
 	for _, e := range c.Env {
 		if e.Unset {
@@ -1356,7 +1371,7 @@ func writeModulefile(c composed, stdout io.Writer) error {
 // and some packages are unusable without theirs — rust-lang.org ships
 // bin/cargo-clippy and bin/cargo-fmt and NO `cargo`, because cargo is the
 // separate rust-lang.org/cargo project it names in `companions:`. A recipe that
-// declares rust-lang.org and then runs `cargo` is correct against upstream pkgx
+// declares rust-lang.org and then runs `cargo` is correct against upstream zpkgx
 // and used to die here with `"cargo": executable file not found in $PATH`
 // (go-zpkg/bottle#65). 74 of the pantry's 1899 recipes declare the key.
 //
@@ -1378,8 +1393,8 @@ func addCompanions(roots map[string]string) {
 	}
 	for _, p := range named {
 		// Ask about a package's companions only once the package itself is real.
-		// Otherwise `pkgx ./x.py` — which is not a project at all — leads with
-		//   pkgx: could not read ./x.py's companions: … Not Found
+		// Otherwise `zpkgx ./x.py` — which is not a project at all — leads with
+		//   zpkgx: could not read ./x.py's companions: … Not Found
 		// and blames companions for a name the resolver is about to reject
 		// properly one line later. A root that does not resolve is the
 		// resolver's to report, not this function's.
@@ -1405,7 +1420,7 @@ func addCompanions(roots map[string]string) {
 
 // composeSpecs resolves a package set and returns what it contributes to the
 // environment. It is the module front-end's one entry into the resolver, so
-// `pkge load` and `eval "$(pkgx +…)"` cannot disagree about a closure.
+// `zpkge load` and `eval "$(zpkgx +…)"` cannot disagree about a closure.
 func composeSpecs(specs []string) (composed, error) {
 	dir := bottle.Dir()
 	envs := currentEnvironments()
@@ -1458,7 +1473,7 @@ func sortedMapListKeys(m map[string][]string) []string {
 func currentEnvironments() map[string]environment {
 	home, _ := os.UserHomeDir()
 	return loadEnvironments(environmentDirs(bottle.Dir(), home), func(msg string) {
-		fmt.Fprintln(os.Stderr, "pkgx: "+msg)
+		fmt.Fprintln(os.Stderr, "zpkgx: "+msg)
 	})
 }
 
@@ -1467,7 +1482,7 @@ func currentEnvironments() map[string]environment {
 func modeAvail(stdout io.Writer) error {
 	envs := sortedEnvironments(currentEnvironments())
 	if len(envs) == 0 {
-		fmt.Fprintln(stdout, "no environment declared (see pkgx env show)")
+		fmt.Fprintln(stdout, "no environment declared (see zpkgx env show)")
 		return nil
 	}
 	for _, e := range envs {

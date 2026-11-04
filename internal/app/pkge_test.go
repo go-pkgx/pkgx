@@ -17,7 +17,7 @@ func fakeEnv(m map[string]string) func(string) (string, bool) {
 func twoPkgs(specs []string) (composed, error) {
 	var c composed
 	for _, s := range specs {
-		c.Env = append(c.Env, envVar{Name: "PATH", Prepend: []string{"/pkgx/" + s + "/bin"}})
+		c.Env = append(c.Env, envVar{Name: "PATH", Prepend: []string{"/zpkgx/" + s + "/bin"}})
 	}
 	if len(specs) > 0 {
 		c.Env = append(c.Env, envVar{Name: "TOOLVAR", Value: "set-by-" + specs[len(specs)-1]})
@@ -46,7 +46,7 @@ func TestLoadCapturesTheBaseOnce(t *testing.T) {
 	}
 	// A second load must NOT record the first load's output as the base.
 	base := betweenQuotes(t, got, "export PKGE_BASE=")
-	env2 := map[string]string{"PATH": "/pkgx/a/bin:/usr/bin", "TOOLVAR": "set-by-a", "PKGE_SPECS": "a", "PKGE_BASE": base}
+	env2 := map[string]string{"PATH": "/zpkgx/a/bin:/usr/bin", "TOOLVAR": "set-by-a", "PKGE_SPECS": "a", "PKGE_BASE": base}
 	var out2 strings.Builder
 	if err := modeShell("load", []string{"b"}, twoPkgs, fakeEnv(env2), &out2); err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestUnloadIsExact(t *testing.T) {
 	}
 	base := betweenQuotes(t, loaded.String(), "export PKGE_BASE=")
 	env := map[string]string{
-		"PATH": "/pkgx/a/bin:/pkgx/b/bin:/pkgx/c/bin:/usr/bin", "TOOLVAR": "set-by-c",
+		"PATH": "/zpkgx/a/bin:/zpkgx/b/bin:/zpkgx/c/bin:/usr/bin", "TOOLVAR": "set-by-c",
 		"PKGE_SPECS": "a b c", "PKGE_BASE": base,
 	}
 	var afterUnload strings.Builder
@@ -179,7 +179,7 @@ func TestShellInitIsValidShell(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := filepath.Join(t.TempDir(), "init.sh")
-	if err := os.WriteFile(f, []byte(out.String()+"\npkge help 2>/dev/null\n"), 0o644); err != nil {
+	if err := os.WriteFile(f, []byte(out.String()+"\nzpkge help 2>/dev/null\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if b, err := osexec.Command(sh, "-n", f).CombinedOutput(); err != nil {

@@ -33,11 +33,11 @@ func TestSplitPlus(t *testing.T) {
 	}{
 		// no +pkg: the first token is the package to run.
 		{[]string{"node@22", "--version"}, nil, []string{"node@22", "--version"}},
-		// +pkgs then a command.
+		// +zpkgs then a command.
 		{[]string{"+git", "+gnu.org/bash", "sh", "-c", "x"}, []string{"git", "gnu.org/bash"}, []string{"sh", "-c", "x"}},
 		// "--" ends the package list and is dropped.
 		{[]string{"+git", "--", "git", "--version"}, []string{"git"}, []string{"git", "--version"}},
-		// +pkgs with no command.
+		// +zpkgs with no command.
 		{[]string{"+wget"}, []string{"wget"}, nil},
 		// lone "--" then a bare command.
 		{[]string{"--", "env"}, nil, []string{"env"}},
@@ -56,7 +56,7 @@ func TestSpecParsing(t *testing.T) {
 		{"node@22", "node", "22"},
 		{"gnu.org/wget@^1.21", "gnu.org/wget", "^1.21"},
 		{"openssl.org@=3.0.0", "openssl.org", "=3.0.0"},
-		// A range operator appended straight to the project is pkgx syntax too,
+		// A range operator appended straight to the project is zpkgx syntax too,
 		// and it is what a pantry dependency map renders as. Reading it as part
 		// of the project name asks the registry for "…/ncurses^6" and the whole
 		// dependency environment dies with "invalid repository".
@@ -106,10 +106,10 @@ func eqStrs(a, b []string) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-// TestEnvMode: `pkgx +a +b` with no command prints the environment those
-// packages bring — the `eval "$(pkgx …)"` contract bk's build script depends on.
+// TestEnvMode: `zpkgx +a +b` with no command prints the environment those
+// packages bring — the `eval "$(zpkgx …)"` contract bk's build script depends on.
 // It must cover the WHOLE closure and BOTH lib and lib64 (a linux/x86-64 bottle
-// may install its libraries and .pc files under lib64; upstream pkgx exports
+// may install its libraries and .pc files under lib64; upstream zpkgx exports
 // only lib/pkgconfig, which is why a wget build could not find openssl there).
 func TestEnvMode(t *testing.T) {
 	dir := t.TempDir()
@@ -195,7 +195,7 @@ func TestAddDir(t *testing.T) {
 	}
 }
 
-// TestResolveBinExplicitPath: `pkgx +pkg -- /abs/path` runs that path, which is
+// TestResolveBinExplicitPath: `zpkgx +pkg -- /abs/path` runs that path, which is
 // how a tool that is NOT one of the packages (bk in a scratch builder) gets a
 // runtime environment from them.
 func TestResolveBinExplicitPath(t *testing.T) {
@@ -509,31 +509,31 @@ func TestFormatFlagsNeedAPackageSet(t *testing.T) {
 	}
 }
 
-// `pkgs env` is the front-end's one entry point, and its failure modes must be
+// `zpkgs env` is the front-end's one entry point, and its failure modes must be
 // usage errors rather than a silent fall-through.
 //
-// ⛔ IT IS `pkgs`, AND THE OLD VERSION OF THIS TEST DID NOT MERELY FAIL — IT
+// ⛔ IT IS `zpkgs`, AND THE OLD VERSION OF THIS TEST DID NOT MERELY FAIL — IT
 // REPLACED THE TEST BINARY. The comment here used to read "rather than a
 // silent fall-through into 'run a package called env'", which is now
-// exactly what pkgx is supposed to do: `gnu.org/coreutils` provides `env`,
-// upstream pkgx runs it, and running is syscall.Exec. So `run(["env",
+// exactly what zpkgx is supposed to do: `gnu.org/coreutils` provides `env`,
+// upstream zpkgx runs it, and running is syscall.Exec. So `run(["env",
 // "init"])` execve'd the system env, the Go test process ceased to exist
 // mid-suite, and `go test` reported FAIL with no failing test named and no
 // panic — just a stray `[: missing ']'` from a shell that was never ours.
 //
-// Which is why the pkgx half below goes through unknownVerb rather than
+// Which is why the zpkgx half below goes through unknownVerb rather than
 // through run: asserting it end to end would exec something, and a test
 // that execs cannot report.
 func TestEnvVerb(t *testing.T) {
 	asPkgs(t)
 	if code := Pkgs([]string{"env"}); code != 2 {
-		t.Errorf("bare `pkgs env` = %d, want 2", code)
+		t.Errorf("bare `zpkgs env` = %d, want 2", code)
 	}
 	if code := Pkgs([]string{"env", "nonsense"}); code != 2 {
 		t.Errorf("unknown env command = %d, want 2", code)
 	}
 	if code := Pkgs([]string{"env", "init"}); code != 0 {
-		t.Errorf("`pkgs env init` = %d, want 0", code)
+		t.Errorf("`zpkgs env init` = %d, want 0", code)
 	}
 }
 
@@ -548,7 +548,7 @@ func TestEnvVerb(t *testing.T) {
 // looked like it worked; PATH is never unset, so it never did.
 func TestSetEnvReplacesRatherThanAppends(t *testing.T) {
 	env := []string{"PATH=/usr/bin:/bin", "HOME=/h"}
-	got := setEnv(env, "PATH", "/pkgx/bin:/usr/bin:/bin")
+	got := setEnv(env, "PATH", "/zpkgx/bin:/usr/bin:/bin")
 	n := 0
 	for _, e := range got {
 		if strings.HasPrefix(e, "PATH=") {
@@ -558,7 +558,7 @@ func TestSetEnvReplacesRatherThanAppends(t *testing.T) {
 	if n != 1 {
 		t.Errorf("PATH appears %d times, want 1 — a duplicate is resolved by execve, not by us", n)
 	}
-	if v := getEnv(got, "PATH"); v != "/pkgx/bin:/usr/bin:/bin" {
+	if v := getEnv(got, "PATH"); v != "/zpkgx/bin:/usr/bin:/bin" {
 		t.Errorf("PATH = %q, want the replacement", v)
 	}
 	if v := getEnv(got, "HOME"); v != "/h" {
@@ -573,7 +573,7 @@ func TestSetEnvReplacesRatherThanAppends(t *testing.T) {
 
 // A recipe's `runtime: env:` chains onto what the caller had — help2man writes
 // `PERL5LIB: "{{prefix}}/lib/perl5:$PERL5LIB"` — and bottle keeps the `$VAR`
-// verbatim because the SHELL expands it in `eval "$(pkgx +…)"`. There is no
+// verbatim because the SHELL expands it in `eval "$(zpkgx +…)"`. There is no
 // shell in the run form, so it has to expand them itself; otherwise the literal
 // characters `$PERL5LIB` arrive at the end of a path list, which is what
 // yt-dlp's PYTHONPATH looked like.
@@ -704,7 +704,7 @@ func captureStdout(t *testing.T, f func()) string {
 	return out
 }
 
-// TestEvalFormFailsTheShell: `eval "$(pkgx +a +b)"` must not succeed when the
+// TestEvalFormFailsTheShell: `eval "$(zpkgx +a +b)"` must not succeed when the
 // resolution did not.
 //
 // A command substitution DISCARDS the exit status of what it ran, so the shell
@@ -779,7 +779,7 @@ func TestEnvModeGlibcLibDirFollowsTheLoader(t *testing.T) {
 		if !strings.Contains(out.String(), sub) {
 			t.Errorf("LD_LIBRARY_PATH does not name %s:\n%s", sub, out.String())
 		}
-		// And it agrees with what `pkgx -- cmd` hands its loader.
+		// And it agrees with what `zpkgx -- cmd` hands its loader.
 		for _, d := range bottle.LibDirs(closure, dir) {
 			if !strings.Contains(out.String(), d) {
 				t.Errorf("the eval omits %s, which bottle.LibDirs includes:\n%s", d, out.String())
@@ -814,6 +814,6 @@ func TestLoaderIsOursSaysNoOnThisMachine(t *testing.T) {
 		t.Error("an empty directory cannot own this machine's loader")
 	}
 	if loaderIsOurs("") {
-		t.Error("no pkgx dir means no loader of ours")
+		t.Error("no zpkgx dir means no loader of ours")
 	}
 }

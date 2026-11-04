@@ -8,22 +8,22 @@ import (
 	"github.com/go-zpkg/bottle"
 )
 
-// `pkgx -Q` — upstream's query mode, which this fork had never implemented.
+// `zpkgx -Q` — upstream's query mode, which this fork had never implemented.
 //
-// ⛔ ITS ABSENCE IS WHY THE GRAMMAR BROKE. Upstream pkgx answers "what can
+// ⛔ ITS ABSENCE IS WHY THE GRAMMAR BROKE. Upstream zpkgx answers "what can
 // you run?" with a FLAG, precisely because the first positional is always a
 // package:
 //
-//	pkgx -Q git     # can you run git? prints the project that provides it
-//	pkgx -Q         # everything that could be run
+//	zpkgx -Q git     # can you run git? prints the project that provides it
+//	zpkgx -Q         # everything that could be run
 //
 // Not having it, this fork reached for the one position upstream reserves
 // and put nine verbs in it — two of which, `ls` and `env`, shadowed commands
-// gnu.org/coreutils provides. The verbs are in `pkgs` now; this is the half
+// gnu.org/coreutils provides. The verbs are in `zpkgs` now; this is the half
 // that should have been here all along.
 //
 // It reads the CATALOGUE, so it needs no network and works in a scratch
-// image, and it answers from the same file `pkgs ls` and <TAB> read.
+// image, and it answers from the same file `zpkgs ls` and <TAB> read.
 func runQuery(args []string, stdout, stderr io.Writer) int {
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
@@ -33,7 +33,7 @@ func runQuery(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if len(cat.Projects) == 0 {
-		fmt.Fprintln(stderr, pfx()+"no catalogue here; run: pkgs catalog update")
+		fmt.Fprintln(stderr, pfx()+"no catalogue here; run: zpkgs catalog update")
 		return 1
 	}
 	switch len(args) {
@@ -102,58 +102,58 @@ func queryOne(cat bottle.Catalog, cmd string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// unknownVerb answers a bare word that used to be a `pkgx` verb and is now
-// one of `pkgs`'s, and reports whether it said anything.
+// unknownVerb answers a bare word that used to be a `zpkgx` verb and is now
+// one of `zpkgs`'s, and reports whether it said anything.
 //
-// ⛔ ONLY WHEN THE REGISTRY HAS NOTHING BY THAT NAME. `pkgx ls` must run
+// ⛔ ONLY WHEN THE REGISTRY HAS NOTHING BY THAT NAME. `zpkgx ls` must run
 // gnu.org/coreutils' ls — that is the whole point of moving the verbs — so
 // this must not intercept a word a package provides. It checks the
 // catalogue first and stays silent when there is a package to run, which
-// means `pkgx ls` runs ls and `pkgx why` (no package named why) is told
+// means `zpkgx ls` runs ls and `zpkgx why` (no package named why) is told
 // where `why` went instead of failing with "no such package".
 //
 // A catalogue that cannot be read is a silence, not a guess: the resolver
 // one line later gives the better error.
-// pkgeSubcommands are the words the generated pkge shell function passes to
+// zpkgeSubcommands are the words the generated zpkge shell function passes to
 // `env`. They are the whole reason staleEnvCall exists; see it.
-var pkgeSubcommands = []string{"init", "load", "unload", "purge", "avail", "show", "import"}
+var zpkgeSubcommands = []string{"init", "load", "unload", "purge", "avail", "show", "import"}
 
-// staleEnvCall answers `pkgx env <pkge subcommand>`, and reports whether it
+// staleEnvCall answers `zpkgx env <zpkge subcommand>`, and reports whether it
 // said anything.
 //
 // ⛔ ONE WORD WIDE, AND IT IS THE ONE THAT BITES. Of the nine verbs that
-// moved to pkgs, `env` is the only one that is BOTH provided by a package —
-// gnu.org/coreutils — AND baked into something users already have: the pkge
+// moved to zpkgs, `env` is the only one that is BOTH provided by a package —
+// gnu.org/coreutils — AND baked into something users already have: the zpkge
 // shell function, which a profile sources and which runs
 //
-//	command pkgx env "$_pkge_cmd" "$@"
+//	command zpkgx env "$_zpkge_cmd" "$@"
 //
 // Every other moved word reaches unknownVerb and is told where it went.
-// `env` does not: a package provides it, so pkgx correctly runs GNU env, and
-// a profile written last month answers `pkge load foo` with
+// `env` does not: a package provides it, so zpkgx correctly runs GNU env, and
+// a profile written last month answers `zpkge load foo` with
 //
 //	env: 'load': No such file or directory      (exit 127)
 //
-// which names neither pkgx nor pkgs and looks like the user's fault. That is
-// the same shape as the `pkgx ls` → `[` defect the split already uncovered:
+// which names neither zpkgx nor zpkgs and looks like the user's fault. That is
+// the same shape as the `zpkgx ls` → `[` defect the split already uncovered:
 // a plausible error from the wrong program.
 //
 // ⛔ IT REFUSES; IT DOES NOT DO THE WORK. This is a transition note, not a
-// verb coming back — pkgx never reads an environment again. The cost is that
-// `pkgx env show` can no longer mean "run GNU env, then a program called
+// verb coming back — zpkgx never reads an environment again. The cost is that
+// `zpkgx env show` can no longer mean "run GNU env, then a program called
 // show"; the message says exactly what happened, and `env` with any other
 // argument still runs coreutils as it should.
 func staleEnvCall(argv []string, stderr io.Writer) (int, bool) {
 	if len(argv) < 2 || argv[0] != "env" {
 		return 0, false
 	}
-	for _, s := range pkgeSubcommands {
+	for _, s := range zpkgeSubcommands {
 		if argv[1] != s {
 			continue
 		}
-		fmt.Fprintf(stderr, "%senv %s is pkgs's: pkgs env %s\n", pfx(), argv[1], argv[1])
-		fmt.Fprintf(stderr, "%sif a profile is still calling this, its pkge function is from before the split — re-run: eval \"$(pkgs env init)\"\n", pfx())
-		fmt.Fprintf(stderr, "%s(to run gnu.org/coreutils' env instead, give it something that is not a pkge subcommand)\n", pfx())
+		fmt.Fprintf(stderr, "%senv %s is zpkgs's: zpkgs env %s\n", pfx(), argv[1], argv[1])
+		fmt.Fprintf(stderr, "%sif a profile is still calling this, its zpkge function is from before the split — re-run: eval \"$(zpkgs env init)\"\n", pfx())
+		fmt.Fprintf(stderr, "%s(to run gnu.org/coreutils' env instead, give it something that is not a zpkge subcommand)\n", pfx())
 		return 2, true
 	}
 	return 0, false
@@ -174,7 +174,7 @@ func unknownVerb(word string, stderr io.Writer) (int, bool) {
 			}
 		}
 	}
-	fmt.Fprintf(stderr, "%s%q is a pkgs command, not a pkgx one: pkgs %s\n", pfx(), word, word)
-	fmt.Fprintf(stderr, "%spkgx runs packages; pkgs answers about them. `pkgs -h` lists its verbs.\n", pfx())
+	fmt.Fprintf(stderr, "%s%q is a zpkgs command, not a zpkgx one: zpkgs %s\n", pfx(), word, word)
+	fmt.Fprintf(stderr, "%szpkgx runs packages; zpkgs answers about them. `zpkgs -h` lists its verbs.\n", pfx())
 	return 2, true
 }

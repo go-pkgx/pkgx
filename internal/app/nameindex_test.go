@@ -12,7 +12,7 @@ import (
 )
 
 // indexStore lays out a store with a catalogue, and optionally its index,
-// exactly where pkgx looks for them — and points ZPKG_DIR at it.
+// exactly where zpkgx looks for them — and points ZPKG_DIR at it.
 func indexStore(t *testing.T, cat bottle.Catalog, withIndex bool) (dir, jsonPath, namesPath string) {
 	t.Helper()
 	dir = t.TempDir()
@@ -143,7 +143,7 @@ func TestNameIndexRefusals(t *testing.T) {
 			// Otherwise valid, for the reason the magic case above gives: a
 			// made-up size here meant the SIZE guard rejected it and
 			// deleting the version check left the test green.
-			"a format version this pkgx does not know, otherwise valid",
+			"a format version this zpkgx does not know, otherwise valid",
 			func(t *testing.T, jsonPath, names string) {
 				writeIndexFile(t, names, fmt.Sprintf("%s %d %d 3\n%s",
 					nameIndexMagic, nameIndexVersion+1, jsonSize(t, jsonPath), threeLines()))
@@ -304,7 +304,7 @@ func threeLines() string {
 	return "aerc-mail.org\t\ncurl.se\t8.20\ngnu.org/bash\t5.3\n"
 }
 
-// `pkgx catalog reindex` builds the index from the catalogue already on disk,
+// `zpkgx catalog reindex` builds the index from the catalogue already on disk,
 // with no network.
 //
 // It exists for the air-gapped case catalogPath's comment describes — an image
@@ -343,7 +343,7 @@ func TestCatalogReindexRefusals(t *testing.T) {
 			t.Fatalf("code = %d, want 1", code)
 		}
 		// The command that fixes it, which is the only useful thing to say.
-		if !strings.Contains(errb.String(), "pkgx catalog update") {
+		if !strings.Contains(errb.String(), "zpkgx catalog update") {
 			t.Errorf("stderr = %q", errb.String())
 		}
 	})
@@ -571,7 +571,7 @@ func TestTheIndexRefusesANameTheCatalogueParserWouldRefuse(t *testing.T) {
 // goes to the real $ZPKG_DIR. So a test that faked `catalogFor` was silently
 // answered from whatever index the developer's machine held:
 // TestCompletionCarriesTheMark passed in CI, where there is no ~/.pkgx, and
-// failed here the moment this machine had run `pkgx catalog reindex`. Green on
+// failed here the moment this machine had run `zpkgx catalog reindex`. Green on
 // a clean machine is the worst way for that to fail.
 //
 // This is the control. It plants an index that would give a DIFFERENT answer,

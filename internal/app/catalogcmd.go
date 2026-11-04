@@ -11,7 +11,7 @@ import (
 	"github.com/go-zpkg/bottle"
 )
 
-// `pkgx catalog` — the ONE path that talks to the registry about what exists.
+// `zpkgx catalog` — the ONE path that talks to the registry about what exists.
 //
 // # WHY A FETCH IS A COMMAND AND NOT A SIDE EFFECT
 //
@@ -19,7 +19,7 @@ import (
 // fail. A shell that pauses on TAB is a shell the user stops pressing TAB
 // in.
 //
-// Before this, every TAB spawned a `pkgx` that fetched an OCI token and
+// Before this, every TAB spawned a `zpkgx` that fetched an OCI token and
 // pulled the catalogue bottle — 470 KB as measured 2026-10-11, and ~200 KB
 // when this was written, because `bk catalog --versions` grew it; the figure
 // carries its date for exactly that reason — once per press, with no reuse
@@ -32,7 +32,7 @@ import (
 // index is a thing you refresh, not a thing every command re-derives.
 //
 // The cost is that a catalogue goes stale and nobody is told by magic.
-// That is paid for by saying the age on every `pkgx ls`, and by this
+// That is paid for by saying the age on every `zpkgx ls`, and by this
 // command printing it too.
 func runCatalogCmd(args []string, stdout, stderr io.Writer) int {
 	switch {
@@ -131,7 +131,7 @@ func catalogReindex(stdout, stderr io.Writer) int {
 // catalogPath is where the fetched catalogue lives, per platform.
 //
 // Under $ZPKG_DIR rather than a cache directory, because it is not a cache:
-// nothing re-derives it on a miss, and losing it changes what `pkgx ls`
+// nothing re-derives it on a miss, and losing it changes what `zpkgx ls`
 // can answer. It belongs with the store it describes — and a scratch image
 // that ships one just drops the file in beside the packages.
 func catalogPath(osn, arch string) string {
@@ -140,7 +140,7 @@ func catalogPath(osn, arch string) string {
 
 // catalogAbsent says whether there is simply NO catalogue here, as opposed
 // to one that exists and could not be read. The caller prints a different
-// sentence for each, because "run pkgx catalog update" is the fix for the
+// sentence for each, because "run zpkgx catalog update" is the fix for the
 // first and no help at all for the second.
 func catalogAbsent() bool {
 	osn, arch := bottle.HostSlug()
@@ -160,7 +160,7 @@ func catalogAbsent() bool {
 // second machine is an answer nobody checks.
 //
 // It writes to that platform's own path, so a foreign catalogue cannot be
-// mistaken for the host's: `pkgx ls` reads catalog/<host>.json and will not
+// mistaken for the host's: `zpkgx ls` reads catalog/<host>.json and will not
 // see it.
 func catalogUpdate(osn, arch string, stdout, stderr io.Writer) int {
 	c, err := fetchCatalogFor(osn, arch)
@@ -218,7 +218,7 @@ func catalogUpdate(osn, arch string, stdout, stderr io.Writer) int {
 // `ls`, `search` and <TAB> go through catalogFor, which honours ZPKG_CATALOG.
 // So with that variable set, the command whose entire job is "what am I
 // looking at" answered about the host's catalogue while the previous command
-// had read the named one — the same defect as go-zpkg/pkgx#110, in the one
+// had read the named one — the same defect as go-zpkg/zpkgx#110, in the one
 // place where a wrong answer cannot be caught by comparing it with anything.
 func catalogStatus(stdout, stderr io.Writer) int {
 	osn, arch := bottle.HostSlug()

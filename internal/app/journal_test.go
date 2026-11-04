@@ -14,7 +14,7 @@ import (
 
 // bottleNoBottleErr is the real error bottle raises when a project exists
 // but has no bottle for this platform — the one `sayHowToAsk` turns into the
-// `pkgs request` hint. Using bottle's own type rather than a lookalike is
+// `zpkgs request` hint. Using bottle's own type rather than a lookalike is
 // what keeps the journal's taxonomy tied to the hint's.
 func bottleNoBottleErr(project string) error {
 	return &bottle.NoBottleHereError{Project: project}
@@ -59,7 +59,7 @@ func TestJournalRecordsOtherFailuresWithoutAProject(t *testing.T) {
 }
 
 // ⛔ THE JOURNAL MUST NOT BREAK THE COMMAND IT RECORDS. A store that cannot
-// be written is a reason for the diary to stay empty, not for `pkgx node` to
+// be written is a reason for the diary to stay empty, not for `zpkgx node` to
 // fail, so recordFailure reports nothing and must not panic.
 func TestJournalSurvivesAnUnwritableStore(t *testing.T) {
 	dir := t.TempDir()
@@ -74,10 +74,10 @@ func TestJournalSurvivesAnUnwritableStore(t *testing.T) {
 
 // ⛔ IT MUST NOT CARRY WHAT IT CANNOT PRINT. The text is an error string, and
 // those quote names read out of a catalogue, a registry index or a
-// downloaded binary. What is written now is printed later by `pkgs journal`.
+// downloaded binary. What is written now is printed later by `zpkgs journal`.
 func TestJournalStripsWhatWouldReachATerminal(t *testing.T) {
 	journalStore(t)
-	recordFailure(errors.New("harmless\x1b[2K\rpkgx  SAFE\x00\x07 and\na newline"))
+	recordFailure(errors.New("harmless\x1b[2K\rzpkgx  SAFE\x00\x07 and\na newline"))
 
 	got := readJournal(journalPath())
 	if len(got) != 1 {

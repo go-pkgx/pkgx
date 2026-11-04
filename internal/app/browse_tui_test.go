@@ -119,7 +119,7 @@ func TestAnArrowIsNotThreeKeystrokes(t *testing.T) {
 }
 
 // q prints the pins on STDOUT and the screen on stderr, so
-// `pkgx +$(pkgx browse)` composes instead of putting borders on a command
+// `zpkgx +$(zpkgx browse)` composes instead of putting borders on a command
 // line.
 func TestPinsAreTheResultAndGoToStdout(t *testing.T) {
 	b := &browser{cat: browseCat()}
@@ -185,7 +185,7 @@ func TestRenderShowsAWindow(t *testing.T) {
 	}
 }
 
-// Without a terminal it prints and exits — `pkgx browse | less`, a CI log,
+// Without a terminal it prints and exits — `zpkgx browse | less`, a CI log,
 // a scratch image. A command that refuses to work when its output is a pipe
 // is a command people stop putting in scripts.
 func TestBrowseWithoutATerminalPrintsTheTree(t *testing.T) {
@@ -219,7 +219,7 @@ func TestBrowseWithNoCatalogue(t *testing.T) {
 	if code := runBrowse(nil, bytes.NewReader(nil), &bytes.Buffer{}, &errb); code != 1 {
 		t.Errorf("code=%d, want 1", code)
 	}
-	if !strings.Contains(errb.String(), "pkgx catalog update") {
+	if !strings.Contains(errb.String(), "zpkgx catalog update") {
 		t.Errorf("stderr=%q", errb.String())
 	}
 }
@@ -255,14 +255,14 @@ func TestTheHelpLineMatchesTheBindings(t *testing.T) {
 
 func TestBrowseIsReachable(t *testing.T) {
 	asPkgs(t)
-	if !strings.Contains(pkgsUsage, "pkgs browse") {
-		t.Error("pkgs usage does not mention browse")
+	if !strings.Contains(zpkgsUsage, "zpkgs browse") {
+		t.Error("zpkgs usage does not mention browse")
 	}
-	// pkgx has to name it too: the verb moved, and a help text that simply
+	// zpkgx has to name it too: the verb moved, and a help text that simply
 	// stopped mentioning browse would read as "removed" to anyone who used
 	// it yesterday.
-	if !strings.Contains(usage, "pkgs browse") {
-		t.Error("pkgx usage does not point at pkgs browse")
+	if !strings.Contains(usage, "zpkgs browse") {
+		t.Error("zpkgx usage does not point at zpkgs browse")
 	}
 	found := false
 	for _, c := range completionsFor("bro") {
@@ -271,7 +271,7 @@ func TestBrowseIsReachable(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("pkgs bro<TAB> does not offer browse")
+		t.Error("zpkgs bro<TAB> does not offer browse")
 	}
 	if code := runBrowse([]string{"a", "b"}, bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
 		t.Error("two nodes is not a usage error")

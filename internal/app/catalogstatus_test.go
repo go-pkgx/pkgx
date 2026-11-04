@@ -9,13 +9,13 @@ import (
 )
 
 // ⛔ TestCatalogStatusNamesTheCatalogueItWouldRead is the whole point of
-// `pkgs catalog`. It answers "what am I looking at", and it used to answer
+// `zpkgs catalog`. It answers "what am I looking at", and it used to answer
 // about the host's file while `ls`, `search` and <TAB> — which go through
 // catalogFor — had just read the one ZPKG_CATALOG names. That is the defect
-// go-zpkg/pkgx#110 describes, in the one place where a wrong answer cannot be
+// go-zpkg/zpkgx#110 describes, in the one place where a wrong answer cannot be
 // caught by comparing it with anything else on screen.
 //
-// Observed before the fix: `ZPKG_CATALOG=…/linux-x86-64.json pkgs catalog`
+// Observed before the fix: `ZPKG_CATALOG=…/linux-x86-64.json zpkgs catalog`
 // printed `…/darwin-aarch64.json` and that file's project count.
 func TestCatalogStatusNamesTheCatalogueItWouldRead(t *testing.T) {
 	dir := t.TempDir()

@@ -23,7 +23,7 @@ import (
 // for and do not get: a missing platform, a constraint nothing satisfies, a
 // soname no bottle provides. Upstream package managers collect that by
 // phoning home. This does not, and the reason is already written into the
-// command it sits beside — `pkgs request` prints a report you can open as an
+// command it sits beside — `zpkgs request` prints a report you can open as an
 // issue and says, in its own help, that it *sends nothing*.
 //
 // So this keeps the same promise and adds the only thing `request` cannot:
@@ -31,13 +31,13 @@ import (
 // journal answers "what has been failing here, and how often" — which is the
 // question worth acting on, and the one a single error message cannot reach.
 //
-// Nothing here opens a socket. `pkgs journal` prints the file; turning it
-// into a report is `pkgs request`, which still sends nothing by itself.
+// Nothing here opens a socket. `zpkgs journal` prints the file; turning it
+// into a report is `zpkgs request`, which still sends nothing by itself.
 //
 // # THREE THINGS IT MUST NOT DO
 //
 //   - It must not break the command it is recording. A diary that cannot be
-//     written is not a reason for `pkgx node` to fail, so every error here is
+//     written is not a reason for `zpkgx node` to fail, so every error here is
 //     dropped on purpose.
 //   - It must not grow without bound. A failing command in a loop would
 //     otherwise fill the disk, which is a denial of service a package manager
@@ -92,7 +92,7 @@ func recordFailure(err error) {
 		Message: sanitise(err.Error()),
 	}
 	// bottle already knows how to tell "we do not have this" from "this went
-	// wrong", and exports it for the hint `pkgs request` prints. Reusing it
+	// wrong", and exports it for the hint `zpkgs request` prints. Reusing it
 	// means the journal's taxonomy cannot drift from the hint's.
 	if p := bottle.ProjectToRequest(err); p != "" {
 		e.Kind, e.Project = kindMissing, sanitise(p)
@@ -163,7 +163,7 @@ func rotate(path string) {
 // quote project names, versions and sonames read out of a catalogue, a
 // registry index or a downloaded binary. bottle holds the same line for the
 // catalogue it decodes; this is the same rule at the other end, because what
-// is written now is printed later by `pkgs journal`.
+// is written now is printed later by `zpkgs journal`.
 func sanitise(s string) string {
 	if len(s) > maxField {
 		s = s[:maxField]
@@ -211,7 +211,7 @@ func readJournal(path string) []entry {
 	return out
 }
 
-// runJournal implements `pkgs journal`.
+// runJournal implements `zpkgs journal`.
 func runJournal(args []string, stdout, stderr io.Writer) int {
 	var clear bool
 	n := 20
@@ -221,16 +221,16 @@ func runJournal(args []string, stdout, stderr io.Writer) int {
 			clear = true
 		case "-n":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, "pkgs: -n needs a count")
+				fmt.Fprintln(stderr, "zpkgs: -n needs a count")
 				return 2
 			}
 			i++
 			if _, err := fmt.Sscan(args[i], &n); err != nil || n < 0 {
-				fmt.Fprintf(stderr, "pkgs: -n %q is not a count\n", args[i])
+				fmt.Fprintf(stderr, "zpkgs: -n %q is not a count\n", args[i])
 				return 2
 			}
 		default:
-			fmt.Fprintf(stderr, "pkgs: unknown journal option %s (--clear, -n N)\n", args[i])
+			fmt.Fprintf(stderr, "zpkgs: unknown journal option %s (--clear, -n N)\n", args[i])
 			return 2
 		}
 	}
@@ -285,7 +285,7 @@ func runJournal(args []string, stdout, stderr io.Writer) int {
 		for _, x := range pcs {
 			fmt.Fprintf(stdout, "  %4d  %s\n", x.c, x.p)
 		}
-		fmt.Fprintf(stdout, "\n`%s request <project>` turns one of those into a report you can open as\nan issue. It sends nothing, and neither does this.\n", pkgsTool)
+		fmt.Fprintf(stdout, "\n`%s request <project>` turns one of those into a report you can open as\nan issue. It sends nothing, and neither does this.\n", zpkgsTool)
 	}
 
 	if n > 0 && len(entries) > 0 {

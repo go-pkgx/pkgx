@@ -11,7 +11,7 @@ import (
 	"github.com/go-zpkg/bottle"
 )
 
-// withFetch answers `pkgx catalog update` without a registry, and counts the
+// withFetch answers `zpkgx catalog update` without a registry, and counts the
 // answers. The count is the point of most of this file: the contract being
 // tested is that nothing BUT this command ever asks.
 func withFetch(t *testing.T, c bottle.Catalog, err error) *int {
@@ -38,7 +38,7 @@ func smallCatalog() bottle.Catalog {
 
 // TestUpdateIsTheOnlyThingThatFetches is the whole of phase 1 in one test.
 //
-// Before this, every <TAB> spawned a pkgx that took an OCI token and pulled
+// Before this, every <TAB> spawned a zpkgx that took an OCI token and pulled
 // the catalogue bottle — per press, never reused, because each press is a
 // fresh process. The fix is not a cache with a TTL; it is a line: ONE
 // command fetches, everything else reads a file. `guix pull` and
@@ -56,7 +56,7 @@ func TestUpdateIsTheOnlyThingThatFetches(t *testing.T) {
 	if code := runCatalogCmd(nil, &out, &errb); code != 0 {
 		t.Fatalf("status = %d, %s", code, errb.String())
 	}
-	if !strings.Contains(out.String(), "pkgx catalog update") {
+	if !strings.Contains(out.String(), "zpkgx catalog update") {
 		t.Errorf("a fresh machine is not told how to fix it: %q", out.String())
 	}
 	out.Reset()
@@ -144,7 +144,7 @@ func TestUpdateIsAtomic(t *testing.T) {
 
 // TestAFailedUpdateKeepsTheOldCatalogue. An update that cannot reach the
 // registry is the normal state of a laptop on a train. Losing yesterday's
-// answers to it would make `pkgx catalog update` a command you think twice
+// answers to it would make `zpkgx catalog update` a command you think twice
 // about running, which is the opposite of the point.
 func TestAFailedUpdateKeepsTheOldCatalogue(t *testing.T) {
 	dir := t.TempDir()
@@ -187,7 +187,7 @@ func TestAFailedUpdateKeepsTheOldCatalogue(t *testing.T) {
 
 // TestTheFallbackSentenceMatchesTheState. Two different ways to end up
 // showing the local store, and one sentence fits only one of them: telling
-// somebody to run `pkgx catalog update` when the file is there and will not
+// somebody to run `zpkgx catalog update` when the file is there and will not
 // parse sends them to a command that cannot help.
 func TestTheFallbackSentenceMatchesTheState(t *testing.T) {
 	dir := t.TempDir()
@@ -197,7 +197,7 @@ func TestTheFallbackSentenceMatchesTheState(t *testing.T) {
 
 	var errb bytes.Buffer
 	runLs(nil, &bytes.Buffer{}, &errb)
-	if !strings.Contains(errb.String(), "no catalogue yet; run: pkgx catalog update") {
+	if !strings.Contains(errb.String(), "no catalogue yet; run: zpkgx catalog update") {
 		t.Errorf("a fresh machine is not told what to run: %q", errb.String())
 	}
 
@@ -211,7 +211,7 @@ func TestTheFallbackSentenceMatchesTheState(t *testing.T) {
 	}
 	errb.Reset()
 	runLs(nil, &bytes.Buffer{}, &errb)
-	if strings.Contains(errb.String(), "run: pkgx catalog update") {
+	if strings.Contains(errb.String(), "run: zpkgx catalog update") {
 		t.Errorf("an unparseable catalogue is blamed on never having fetched one: %q", errb.String())
 	}
 	if !strings.Contains(errb.String(), final) {
@@ -247,7 +247,7 @@ func TestCatalogStatusReads(t *testing.T) {
 //
 // ⛔ IT DISPATCHES THROUGH `Pkgs`, NOT `run`. The verb moved there when the
 // two binaries were split; asserting it from `run` would assert the defect
-// back into place, since the whole point is that `pkgx catalog` is now a
+// back into place, since the whole point is that `zpkgx catalog` is now a
 // request to run a package called catalog.
 func TestCatalogIsWiredIntoTheDispatch(t *testing.T) {
 	dir := t.TempDir()
@@ -259,18 +259,18 @@ func TestCatalogIsWiredIntoTheDispatch(t *testing.T) {
 	var code int
 	out := captureStdout(t, func() { code = Pkgs([]string{"catalog"}) })
 	if code != 0 {
-		t.Fatalf("pkgs catalog = %d", code)
+		t.Fatalf("zpkgs catalog = %d", code)
 	}
-	if !strings.Contains(out, "pkgs catalog update") {
-		t.Errorf("pkgs catalog printed %q", out)
+	if !strings.Contains(out, "zpkgs catalog update") {
+		t.Errorf("zpkgs catalog printed %q", out)
 	}
 
 	out = captureStdout(t, func() { code = Pkgs([]string{"catalog", "update"}) })
 	if code != 0 {
-		t.Fatalf("pkgs catalog update = %d", code)
+		t.Fatalf("zpkgs catalog update = %d", code)
 	}
 	if !strings.Contains(out, "2 project(s)") {
-		t.Errorf("pkgs catalog update printed %q", out)
+		t.Errorf("zpkgs catalog update printed %q", out)
 	}
 
 	// And it is offered at the prompt, or nobody finds it.
@@ -281,40 +281,40 @@ func TestCatalogIsWiredIntoTheDispatch(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("pkgs cat<TAB> does not offer catalog")
+		t.Error("zpkgs cat<TAB> does not offer catalog")
 	}
 
 	// A third word is a usage error, not a silently ignored argument.
 	if code := runCatalogCmd([]string{"update", "extra"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
-		t.Errorf("pkgs catalog update extra = %d, want 2", code)
+		t.Errorf("zpkgs catalog update extra = %d, want 2", code)
 	}
 }
 
 // TestUsageMentionsCatalog: a command nobody can discover is a command
 // nobody runs, and `--help` is where a person looks first.
 //
-// Both usages are checked. pkgs owns the verb, and pkgx has to NAME it:
-// somebody who typed `pkgx catalog` yesterday looks at `pkgx -h` first, and
+// Both usages are checked. zpkgs owns the verb, and zpkgx has to NAME it:
+// somebody who typed `zpkgx catalog` yesterday looks at `zpkgx -h` first, and
 // a help text that simply dropped the word would read as "removed".
 func TestUsageMentionsCatalog(t *testing.T) {
-	for _, want := range []string{"pkgs catalog", "ZPKG_CATALOG"} {
-		if !strings.Contains(pkgsUsage, want) {
-			t.Errorf("pkgs usage does not mention %q", want)
+	for _, want := range []string{"zpkgs catalog", "ZPKG_CATALOG"} {
+		if !strings.Contains(zpkgsUsage, want) {
+			t.Errorf("zpkgs usage does not mention %q", want)
 		}
 	}
-	if !strings.Contains(usage, "pkgs catalog") {
-		t.Errorf("pkgx usage does not point at pkgs catalog:\n%s", usage)
+	if !strings.Contains(usage, "zpkgs catalog") {
+		t.Errorf("zpkgx usage does not point at zpkgs catalog:\n%s", usage)
 	}
 }
 
-// asPkgs runs the rest of a test under the `pkgs` binary's name, and puts it
+// asPkgs runs the rest of a test under the `zpkgs` binary's name, and puts it
 // back afterwards. The package-level `tool` decides what every diagnostic
-// says, so a test that forgets this asserts pkgx's wording against pkgs's
+// says, so a test that forgets this asserts zpkgx's wording against zpkgs's
 // output and passes for the wrong reason.
 func asPkgs(t *testing.T) {
 	t.Helper()
 	prev := tool
-	tool = "pkgs"
+	tool = "zpkgs"
 	t.Cleanup(func() { tool = prev })
 }
 
