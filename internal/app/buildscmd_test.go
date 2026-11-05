@@ -293,9 +293,14 @@ func TestSignedByTellsNotAskedFromNobody(t *testing.T) {
 
 	var out bytes.Buffer
 	printBuilds(&out, "fftw.org", []bottle.Build{
-		{Version: bottle.Ver{Raw: "3.3.11", Variant: "aaaaaaaaaaaaaaaa"}, Published: true, Signatures: ok},
-		{Version: bottle.Ver{Raw: "3.3.11", Variant: "bbbbbbbbbbbbbbbb"}, Published: true, Signatures: short},
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: "aaaaaaaaaaaaaaaa"}, Published: true, Signatures: ok,
+			Builder: "https://github.com/go-zpkg/zbk@v0.64.0"},
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: "bbbbbbbbbbbbbbbb"}, Published: true, Signatures: short,
+			Builder: "https://github.com/go-pkgx/bk@v0.26.0"},
+		// Asked, and the bottle carries no provenance — most of the
+		// registry today.
 		{Version: bottle.Ver{Raw: "3.3.11", Variant: "cccccccccccccccc"}, Published: true, Signatures: none},
+		// Never asked at all.
 		{Version: bottle.Ver{Raw: "3.3.11", Variant: "dddddddddddddddd"}, Published: true},
 	}, false)
 	got := out.String()
@@ -323,11 +328,41 @@ func TestSignedByTellsNotAskedFromNobody(t *testing.T) {
 	if strings.Contains(got, "says so") {
 		t.Errorf("the footer claims ZPKG_VERIFY=0 warns; it does not:\n%s", got)
 	}
-	// The unasked row is "?", like the PUBLISHED column's — read as fields so
-	// the assertion does not depend on tabwriter's padding.
+	// The unasked row is "?" in BOTH trust columns, like the PUBLISHED
+	// column's — read as fields so the assertion does not depend on
+	// tabwriter's padding.
 	row := strings.Fields(lineWith(got, "dddddddddddddddd"))
-	if len(row) < 4 || row[3] != "?" {
-		t.Errorf("an unasked registry did not print as ?: %v", row)
+	if len(row) < 5 || row[3] != "?" || row[4] != "?" {
+		t.Errorf("an unasked registry did not print as ? in both columns: %v", row)
+	}
+
+	// ⛔⛔ BUILT BY HAS THREE STATES AND THEY MUST NOT COLLAPSE. "not
+	// recorded" is a fact about the bottle — most of the registry predates
+	// provenance — and "?" is a fact about the network. Rendering them alike
+	// is how a reader concludes an artefact is unauditable when the registry
+	// was simply never reached.
+	for _, want := range []string{"zbk@v0.64.0", "bk@v0.26.0", "not recorded"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("BUILT BY is missing %q:\n%s", want, got)
+		}
+	}
+	// ⛔ A BUILDER ID WITH NO VERSION SAYS SO. The live registry still
+	// carries them — lz4.org 1.10.0 on darwin/aarch64 answers
+	// `https://github.com/go-pkgx/bk` flat — and a bare `bk` in this column
+	// is a tool name shaped exactly like a complete answer.
+	var noVer bytes.Buffer
+	printBuilds(&noVer, "lz4.org", []bottle.Build{
+		{Version: bottle.Ver{Raw: "1.10.0"}, Published: true, Signatures: ok,
+			Builder: "https://github.com/go-pkgx/bk"},
+	}, false)
+	if !strings.Contains(noVer.String(), "bk (no version)") {
+		t.Errorf("a versionless builder printed as a complete answer:\n%s", noVer.String())
+	}
+	// The owner is dropped and the tool and version are not: a column of
+	// identical `https://github.com/go-zpkg/` prefixes is a wasted third of
+	// the line.
+	if strings.Contains(got, "github.com/go-zpkg/zbk@") {
+		t.Errorf("BUILT BY printed the whole URL:\n%s", got)
 	}
 
 	// And the footer appears only when a row actually falls short.
@@ -337,6 +372,30 @@ func TestSignedByTellsNotAskedFromNobody(t *testing.T) {
 	}, false)
 	if strings.Contains(fine.String(), "REFUSED at install time") {
 		t.Errorf("the warning was printed with nothing to warn about:\n%s", fine.String())
+	}
+}
+
+// ⛔⛔ A CONFIGURATION THAT CAN NEVER BE SATISFIED MUST NOT PRINT AS "?".
+// Found by running the released binary against the real registry: with
+// ZPKG_TRUST_THRESHOLD=2 and one trusted key, every SIGNED BY cell came back
+// "?" — this table's word for "the registry was never asked". The reader is
+// told their network failed when their configuration is the thing that cannot
+// work. The error existed and was dropped by the listing, which swallows all
+// errors so it can survive an unreachable registry.
+func TestAnUnmeetableThresholdIsAConfigurationError(t *testing.T) {
+	buildsStore(t)
+	t.Setenv("ZPKG_TRUST_THRESHOLD", "2") // against the one built-in key
+
+	var out, errb bytes.Buffer
+	code := runBuilds([]string{"fftw.org@3.3.11"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("code = %d, want 2 (a usage/configuration error)", code)
+	}
+	if !strings.Contains(errb.String(), "ZPKG_TRUST_THRESHOLD") {
+		t.Errorf("the message should name the variable at fault: %q", errb.String())
+	}
+	if strings.Contains(out.String(), "?") {
+		t.Errorf("a configuration error was drawn as an unasked registry:\n%s", out.String())
 	}
 }
 
