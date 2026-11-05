@@ -5,16 +5,16 @@ import (
 	"testing"
 )
 
-// TestStripVerbosity covers the flags upstream pkgx accepts and this fork did
+// TestStripVerbosity covers the flags upstream zpkgx accepts and this fork did
 // not, and — more importantly — the ones it must NOT swallow.
 //
-// The breakage this fixes: `pkgx --quiet deno^2.1 …` is the shebang of
-// upstream's own `pkgm`, and with this binary as the `pkgx` on PATH it came
+// The breakage this fixes: `zpkgx --quiet deno^2.1 …` is the shebang of
+// upstream's own `zpkgm`, and with this binary as the `zpkgx` on PATH it came
 // back as `no project declares the command "--quiet"`. The flag was being
 // looked up as a COMMAND NAME, so the failure pointed at the registry instead
 // of at the argument.
 //
-// Reference: pkgxdev/pkgx `crates/cli/src/args.rs`, read 2026-10-31 — the long
+// Reference: pkgxdev/zpkgx `crates/cli/src/args.rs`, read 2026-10-31 — the long
 // forms `--quiet`/`--silent` plus single-dash clusters of `q h s j v ! Q C`.
 func TestStripVerbosity(t *testing.T) {
 	for _, c := range []struct {

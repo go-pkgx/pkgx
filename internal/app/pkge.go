@@ -1,13 +1,13 @@
 package app
 
-// The module front-end: `pkge load/unload/purge/list/save/restore`, an
-// Lmod-shaped command over pkgx's own resolution.
+// The module front-end: `zpkge load/unload/purge/list/save/restore`, an
+// Lmod-shaped command over zpkgx's own resolution.
 //
 // The design decision that makes it exact: state lives in the ENVIRONMENT and
-// is read back by pkgx, not by the shell.
+// is read back by zpkgx, not by the shell.
 //
 //   PKGE_SPECS  the package set currently loaded, space-separated
-//   PKGE_BASE   the ORIGINAL value of every variable pkgx has touched,
+//   PKGE_BASE   the ORIGINAL value of every variable zpkgx has touched,
 //                  base64 of NUL-separated NAME=value records
 //
 // The records are separated by NUL, not by a newline. base64 protects the
@@ -38,7 +38,7 @@ import (
 // modState is the front-end's state, decoded from the environment.
 type modState struct {
 	specs []string
-	base  map[string]string // variable -> value before pkgx first touched it
+	base  map[string]string // variable -> value before zpkgx first touched it
 	// had records whether the variable EXISTED before. Restoring a variable that
 	// was previously unset means unsetting it, not setting it empty: an empty
 	// PATH and no PATH are different to every program that reads one.
@@ -121,44 +121,44 @@ func shellQuote(s string) string {
 }
 
 // shellInit is the front-end itself: a shell function, printed for
-// `eval "$(pkgs env init)"` in a profile. It is deliberately thin — every
+// `eval "$(zpkgs env init)"` in a profile. It is deliberately thin — every
 // decision is made by the Go code, which can be tested; the function only
 // evaluates what that prints.
 //
-// ⛔ IT CALLS `pkgs env`, NOT `pkgx env`. The verb moved when `pkgs` was
+// ⛔ IT CALLS `zpkgs env`, NOT `zpkgx env`. The verb moved when `zpkgs` was
 // split out, and this text is the one place where the binary's name is
 // baked into something a user keeps — a profile sourced for months. A
-// function left calling `pkgx env load` would fail with pkgx's "no such
+// function left calling `zpkgx env load` would fail with zpkgx's "no such
 // package: env" long after anyone remembered why.
-const shellInit = `pkge() {
-  _pkge_cmd="${1-}"; [ $# -gt 0 ] && shift
-  case "$_pkge_cmd" in
+const shellInit = `zpkge() {
+  _zpkge_cmd="${1-}"; [ $# -gt 0 ] && shift
+  case "$_zpkge_cmd" in
     load|unload|purge)
-      _pkge_out=$(command pkgs env "$_pkge_cmd" "$@") || return $?
-      eval "$_pkge_out" ;;
+      _zpkge_out=$(command zpkgs env "$_zpkge_cmd" "$@") || return $?
+      eval "$_zpkge_out" ;;
     list)
       # shellcheck disable=SC2086
       [ -n "${PKGE_SPECS-}" ] && printf '%s\n' ${PKGE_SPECS} ;;
     save)
-      [ -n "${1-}" ] || { echo "pkge save <name>" >&2; return 2; }
-      mkdir -p "${PKGX_DIR:-$HOME/.pkgx}/collections" &&
-      printf '%s\n' "${PKGE_SPECS-}" > "${PKGX_DIR:-$HOME/.pkgx}/collections/$1" ;;
+      [ -n "${1-}" ] || { echo "zpkge save <name>" >&2; return 2; }
+      mkdir -p "${ZPKG_DIR:-$HOME/.pkgx}/collections" &&
+      printf '%s\n' "${PKGE_SPECS-}" > "${ZPKG_DIR:-$HOME/.pkgx}/collections/$1" ;;
     restore)
-      [ -n "${1-}" ] || { echo "pkge restore <name>" >&2; return 2; }
-      _pkge_f="${PKGX_DIR:-$HOME/.pkgx}/collections/$1"
-      [ -r "$_pkge_f" ] || { echo "pkge: no collection $1" >&2; return 1; }
-      pkge purge || return $?
+      [ -n "${1-}" ] || { echo "zpkge restore <name>" >&2; return 2; }
+      _zpkge_f="${ZPKG_DIR:-$HOME/.pkgx}/collections/$1"
+      [ -r "$_zpkge_f" ] || { echo "zpkge: no collection $1" >&2; return 1; }
+      zpkge purge || return $?
       # shellcheck disable=SC2046
-      pkge load $(cat "$_pkge_f") ;;
+      zpkge load $(cat "$_zpkge_f") ;;
     ""|help|-h|--help)
-      echo "usage: pkge load|unload <pkg>... | purge | list | save|restore <name>" >&2 ;;
+      echo "usage: zpkge load|unload <pkg>... | purge | list | save|restore <name>" >&2 ;;
     *)
-      echo "pkge: unknown command $_pkge_cmd" >&2; return 2 ;;
+      echo "zpkge: unknown command $_zpkge_cmd" >&2; return 2 ;;
   esac
 }
 `
 
-// moduleShim defines `module` and `ml` in terms of pkge — for a machine that
+// moduleShim defines `module` and `ml` in terms of zpkge — for a machine that
 // has NO Lmod, which is the point: a container, a laptop, a cluster built on
 // this toolchain. Users keep the command they know and their job scripts keep
 // working, without a Lua interpreter and without a modulefile tree.
@@ -166,34 +166,34 @@ const shellInit = `pkge() {
 // It REFUSES to install itself where an Lmod exists. Two implementations
 // answering one command is how a support ticket becomes unanswerable, and the
 // site's own modulefiles are not ours to interpret. There, the right move is
-// the other direction — generate modulefiles with `pkgx --modulefile` and let
+// the other direction — generate modulefiles with `zpkgx --modulefile` and let
 // the site's Lmod load them.
 const moduleShim = `
 if command -v lmod >/dev/null 2>&1 || [ -n "${LMOD_CMD-}" ] || [ -n "${MODULESHOME-}" ]; then
-  echo "pkgx: an existing module system was found; not defining module()." >&2
-  echo "pkgx: publish modulefiles to MODULEPATH instead: pkgx --modulefile +pkg" >&2
+  echo "zpkgx: an existing module system was found; not defining module()." >&2
+  echo "zpkgx: publish modulefiles to MODULEPATH instead: zpkgx --modulefile +pkg" >&2
 else
   module() {
-    _pkge_sub="${1-}"; [ $# -gt 0 ] && shift
-    case "$_pkge_sub" in
-      load|add)        pkge load "$@" ;;
-      unload|rm|del)   pkge unload "$@" ;;
-      purge)           pkge purge ;;
-      list)            pkge list ;;
-      avail|av)        command pkgs env avail ;;
+    _zpkge_sub="${1-}"; [ $# -gt 0 ] && shift
+    case "$_zpkge_sub" in
+      load|add)        zpkge load "$@" ;;
+      unload|rm|del)   zpkge unload "$@" ;;
+      purge)           zpkge purge ;;
+      list)            zpkge list ;;
+      avail|av)        command zpkgs env avail ;;
       show|display|whatis)
                        [ -n "${1-}" ] || { echo "module show <environment>" >&2; return 2; }
-                       command pkgs env show "$1" ;;
-      save)            pkge save "$@" ;;
-      restore)         pkge restore "$@" ;;
+                       command zpkgs env show "$1" ;;
+      save)            zpkge save "$@" ;;
+      restore)         zpkge restore "$@" ;;
       swap|switch)
                        # module swap OLD NEW, and the one-argument form that
                        # swaps whatever of that project is loaded.
-                       if [ $# -eq 2 ]; then pkge unload "$1" && pkge load "$2"
-                       else pkge load "$1"; fi ;;
+                       if [ $# -eq 2 ]; then zpkge unload "$1" && zpkge load "$2"
+                       else zpkge load "$1"; fi ;;
       ""|help|-h|--help)
                        echo "usage: module load|unload|purge|list|avail|show|save|restore|swap" >&2 ;;
-      *)               echo "module: unsupported subcommand $_pkge_sub" >&2; return 2 ;;
+      *)               echo "module: unsupported subcommand $_zpkge_sub" >&2; return 2 ;;
     esac
   }
   ml() {

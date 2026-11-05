@@ -1,4 +1,4 @@
-// Package scratch holds one test: that pkgx and pkgs answer about the whole
+// Package scratch holds one test: that zpkgx and zpkgs answer about the whole
 // dependency tree inside a FROM scratch image with the network cut.
 //
 // # WHY IT IS HERE AND NOT IN A NOTE
@@ -16,13 +16,13 @@
 // "ls answered offline" is the same sentence whether the network was cut or
 // whether somebody dropped the flag that cuts it, and `--network none` is
 // one word away from being absent. So the run includes a PLANTED POSITIVE:
-// `pkgs catalog update`, the one command that must reach the registry, run
+// `zpkgs catalog update`, the one command that must reach the registry, run
 // in the SAME configuration. It has to FAIL, and to fail ABOUT THE NETWORK —
 // a binary that crashed for its own reasons is also non-zero and proves
 // nothing. If it passes, the whole test fails before judging anything else,
 // because every other line would be meaningless.
 //
-// Skipped unless PKGX_SCRATCH_TEST=1, so `go test ./...` on a laptop without
+// Skipped unless ZPKG_SCRATCH_TEST=1, so `go test ./...` on a laptop without
 // docker stays quiet; CI sets it.
 package scratch_test
 
@@ -39,11 +39,11 @@ import (
 )
 
 func TestFromScratchOffline(t *testing.T) {
-	if os.Getenv("PKGX_SCRATCH_TEST") != "1" {
-		t.Skip("set PKGX_SCRATCH_TEST=1 to build the image and run it (needs docker)")
+	if os.Getenv("ZPKG_SCRATCH_TEST") != "1" {
+		t.Skip("set ZPKG_SCRATCH_TEST=1 to build the image and run it (needs docker)")
 	}
 	if _, err := exec.LookPath("docker"); err != nil {
-		t.Fatalf("PKGX_SCRATCH_TEST=1 was asked for and docker is not here: %v", err)
+		t.Fatalf("ZPKG_SCRATCH_TEST=1 was asked for and docker is not here: %v", err)
 	}
 
 	ctx := t.TempDir()
@@ -51,7 +51,7 @@ func TestFromScratchOffline(t *testing.T) {
 	fetchCatalogue(t, ctx)
 	copyFile(t, "Dockerfile", filepath.Join(ctx, "Dockerfile"))
 
-	image := "pkgx-scratch:" + strings.ReplaceAll(t.Name(), "/", "-")
+	image := "zpkgx-scratch:" + strings.ReplaceAll(t.Name(), "/", "-")
 	run(t, "docker", "build", "-t", image, ctx)
 	t.Cleanup(func() { _ = exec.Command("docker", "rmi", "-f", image).Run() })
 
@@ -97,23 +97,23 @@ func TestFromScratchOffline(t *testing.T) {
 	// this machine `docker run` of this image costs ~170 ms before the
 	// binary's first instruction, which is ten times the 20 ms a completion
 	// is allowed, so the first version of this measurement reported docker
-	// and called it pkgx. Timings are logged below for a reader; what is
+	// and called it zpkgx. Timings are logged below for a reader; what is
 	// ASSERTED is that the answer arrives at all with no network to get it
 	// from.
 	t.Run("tab completion", func(t *testing.T) {
 		start := time.Now()
-		code, out := inImageEntrypoint(t, image, "/pkgx",
-			[]string{"PKGX_GET_COMPLETIONS=0"}, "gnu.o")
+		code, out := inImageEntrypoint(t, image, "/zpkgx",
+			[]string{"ZPKG_GET_COMPLETIONS=0"}, "gnu.o")
 		took := time.Since(start)
 		if code != 0 || !strings.Contains(out, "gnu.org") {
 			t.Fatalf("exit %d, no completion:\n%s", code, out)
 		}
 		floorStart := time.Now()
-		if code, out := inImageEntrypoint(t, image, "/pkgx", nil, "--version"); code != 0 {
+		if code, out := inImageEntrypoint(t, image, "/zpkgx", nil, "--version"); code != 0 {
 			t.Fatalf("the floor run failed: exit %d:\n%s", code, out)
 		}
 		floor := time.Since(floorStart)
-		t.Logf("completion %v, container floor (--version) %v, difference %v — the difference is the only part that is about pkgx",
+		t.Logf("completion %v, container floor (--version) %v, difference %v — the difference is the only part that is about zpkgx",
 			took.Round(time.Millisecond), floor.Round(time.Millisecond), (took - floor).Round(time.Millisecond))
 
 		// ⛔ AND THE REGISTRY IT IS TOLD ABOUT MUST NOT MATTER. A completion
@@ -121,8 +121,8 @@ func TestFromScratchOffline(t *testing.T) {
 		// at a blackhole; one that reads a file on disk cannot tell the two
 		// apart. Asserted as an ANSWER, not as a time, for the same reason
 		// as above.
-		code, out = inImageEntrypoint(t, image, "/pkgx",
-			[]string{"PKGX_GET_COMPLETIONS=0", "PKGX_DIST=oci://127.0.0.1:1/nothing"}, "gnu.o")
+		code, out = inImageEntrypoint(t, image, "/zpkgx",
+			[]string{"ZPKG_GET_COMPLETIONS=0", "ZPKG_DIST=oci://127.0.0.1:1/nothing"}, "gnu.o")
 		if code != 0 || !strings.Contains(out, "gnu.org") {
 			t.Errorf("a blackhole registry changed the completion: exit %d:\n%s", code, out)
 		}
@@ -132,7 +132,7 @@ func TestFromScratchOffline(t *testing.T) {
 // buildBinaries cross-builds both commands for the image's platform.
 func buildBinaries(t *testing.T, dir string) {
 	t.Helper()
-	for _, b := range []struct{ out, pkg string }{{"pkgx", ".."}, {"pkgs", "../cmd/pkgs"}} {
+	for _, b := range []struct{ out, pkg string }{{"zpkgx", ".."}, {"zpkgs", "../cmd/zpkgs"}} {
 		cmd := exec.Command("go", "build", "-trimpath", "-o", filepath.Join(dir, b.out), b.pkg)
 		cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+runtime.GOARCH)
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -143,19 +143,19 @@ func buildBinaries(t *testing.T, dir string) {
 
 // fetchCatalogue puts a real catalogue in the build context.
 //
-// It runs the HOST build of pkgs against a store of its own, so the test
-// never reads or writes the developer's ~/.pkgx — and it asks for the
+// It runs the HOST build of zpkgs against a store of its own, so the test
+// never reads or writes the developer's store — and it asks for the
 // platform the image will be, which is not necessarily this one.
 func fetchCatalogue(t *testing.T, dir string) {
 	t.Helper()
 	store := t.TempDir()
-	host := filepath.Join(t.TempDir(), "pkgs")
-	build := exec.Command("go", "build", "-o", host, "../cmd/pkgs")
+	host := filepath.Join(t.TempDir(), "zpkgs")
+	build := exec.Command("go", "build", "-o", host, "../cmd/zpkgs")
 	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("building the host pkgs: %v\n%s", err, out)
+		t.Fatalf("building the host zpkgs: %v\n%s", err, out)
 	}
-	cmd := exec.Command(host, "catalog", "update", "--platform", "linux/"+pkgxArch())
-	cmd.Env = append(os.Environ(), "PKGX_DIR="+store, "PKGX_CATALOG=")
+	cmd := exec.Command(host, "catalog", "update", "--platform", "linux/"+zpkgxArch())
+	cmd.Env = append(os.Environ(), "ZPKG_DIR="+store, "ZPKG_CATALOG=")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("fetching the catalogue (this step, and only this step, needs the network): %v\n%s", err, out)
 	}
@@ -170,7 +170,7 @@ func fetchCatalogue(t *testing.T, dir string) {
 	}
 	// ⛔ An empty copy would build an image whose catalogue is absent, and
 	// `ls` would then answer "no catalogue" — a clean failure that reads as
-	// a defect in pkgx rather than in this test.
+	// a defect in zpkgx rather than in this test.
 	if len(entries) == 0 {
 		t.Fatalf("catalog update wrote nothing into %s", src)
 	}
@@ -179,9 +179,9 @@ func fetchCatalogue(t *testing.T, dir string) {
 	}
 }
 
-// pkgxArch is pkgx's spelling of this machine's architecture, which is not
+// zpkgxArch is zpkgx's spelling of this machine's architecture, which is not
 // Go's: a catalogue is published as linux-x86-64, not linux-amd64.
-func pkgxArch() string {
+func zpkgxArch() string {
 	switch runtime.GOARCH {
 	case "amd64":
 		return "x86-64"

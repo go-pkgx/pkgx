@@ -7,14 +7,14 @@
 // forked all three, and a fork of the resolver is a fork of what a version
 // means.
 //
-// The module path is unchanged, so `go install github.com/go-pkgx/pkgx@latest`
+// The module path is unchanged, so `go install github.com/go-zpkg/zpkgx@latest`
 // still produces this binary and nothing a user types moves.
 package main
 
 import (
 	"os"
 
-	"github.com/go-pkgx/pkgx/internal/app"
+	"github.com/go-zpkg/zpkgx/internal/app"
 )
 
 func main() { os.Exit(app.Pkgx(os.Args[1:])) }

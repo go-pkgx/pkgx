@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // glibcFixture lays out a closure holding glibc's VERSIONED sub-libdir, which
@@ -37,7 +37,7 @@ func poseSeams(t *testing.T) {
 	oldPoses, oldFind := posesLoader, findLoader
 	t.Cleanup(func() { posesLoader, findLoader = oldPoses, oldFind })
 	posesLoader = func() bool { return true }
-	findLoader = func(string) string { return "/pkgx/gnu.org/glibc/v2.44.0/lib/glibc-2.44/ld-linux" }
+	findLoader = func(string) string { return "/zpkgx/gnu.org/glibc/v2.44.0/lib/glibc-2.44/ld-linux" }
 }
 
 // ⛔⛔ THE ORDER IS THE DEFECT. composeEnv exports glibc's versioned lib dir
@@ -46,7 +46,7 @@ func poseSeams(t *testing.T) {
 //
 // Measured 2026-10-09 in a FROM-scratch container: every ELF died with
 // "error while loading shared libraries", jq on libm.so.6 and coreutils' env
-// on libc.so.6, and `pkgx --lock` could not run a lock at all.
+// on libc.so.6, and `zpkgx --lock` could not run a lock at all.
 func TestTheLoaderIsPosedBeforeTheEnvironmentIsComposed(t *testing.T) {
 	dir, _, closure := glibcFixture(t)
 	poseSeams(t)
@@ -119,7 +119,7 @@ func TestTheComposedEnvironmentCarriesTheDirectoryLibcIsIn(t *testing.T) {
 //
 // A probe that cannot find a library concludes the library is absent, and that
 // is indistinguishable from a correct answer until something needs it
-// (go-pkgx/packages#316).
+// (go-zpkg/packages#316).
 func TestTheComposedEnvironmentPutsThatDirectoryOnLibraryPathToo(t *testing.T) {
 	dir, versioned, closure := glibcFixture(t)
 	poseSeams(t)

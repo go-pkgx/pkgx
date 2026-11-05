@@ -33,7 +33,7 @@ func storeAt(t *testing.T) string {
 	if err := os.Symlink("v22.1.8", filepath.Join(dir, "llvm.org", "v*")); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PKGX_DIR", dir)
+	t.Setenv("ZPKG_DIR", dir)
 	return dir
 }
 
@@ -113,7 +113,7 @@ func TestStoreTopN(t *testing.T) {
 // AN ABSENT STORE IS NOT AN ERROR: it is the state of every fresh machine,
 // and the useful thing to print is where it would be.
 func TestStoreWithNoStoreYet(t *testing.T) {
-	t.Setenv("PKGX_DIR", filepath.Join(t.TempDir(), "never-used"))
+	t.Setenv("ZPKG_DIR", filepath.Join(t.TempDir(), "never-used"))
 	var out, errb bytes.Buffer
 	if code := runStore(nil, &out, &errb); code != 0 {
 		t.Fatalf("code=%d, want 0; err=%s", code, errb.String())
@@ -154,7 +154,7 @@ func TestHumanReadsAsAPersonReads(t *testing.T) {
 // is not there. The difference is the code's business, not the reader's.
 //
 // This is the FROM scratch case: the image ships a catalogue and no
-// bottles, so $PKGX_DIR exists and has no projects under it. The first
+// bottles, so $ZPKG_DIR exists and has no projects under it. The first
 // version printed "0 B over 0 version(s) of 0 project(s)", which is correct
 // and tells nobody anything — found by running it in the image, not by
 // reading the function.
@@ -166,7 +166,7 @@ func TestStoreThatExistsButIsEmpty(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "catalog", "linux-aarch64.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PKGX_DIR", dir)
+	t.Setenv("ZPKG_DIR", dir)
 	var out, errb bytes.Buffer
 	if code := runStore(nil, &out, &errb); code != 0 {
 		t.Fatalf("code=%d err=%s", code, errb.String())

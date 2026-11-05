@@ -5,14 +5,14 @@ import (
 	"io"
 	"time"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
-// `pkgx why <project> <dependency>` — WHICH LINK put it there.
+// `zpkgx why <project> <dependency>` — WHICH LINK put it there.
 //
 // # A THIRD QUESTION, NOT A VIEW OF THE OTHER TWO
 //
-// `pkgx ls --tree` says what is in a closure. `pkgx ls --dependents` says
+// `zpkgx ls --tree` says what is in a closure. `zpkgx ls --dependents` says
 // who is affected by a change. Neither says WHY a particular thing is in a
 // particular closure, and that is the question somebody has when they look
 // at a closure and find something they did not ask for.
@@ -36,7 +36,7 @@ func runWhy(args []string, stdout, stderr io.Writer) int {
 	from, to := args[0], args[1]
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"ZPKG_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	// BOTH ENDS ARE CHECKED FIRST, and separately, because "no such

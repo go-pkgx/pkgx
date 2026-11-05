@@ -7,15 +7,15 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 	"golang.org/x/term"
 )
 
-// `pkgx browse` — walking the tree instead of guessing at it.
+// `zpkgx browse` — walking the tree instead of guessing at it.
 //
 // # WHY A SECOND WAY TO READ THE SAME THING
 //
-// `pkgx ls` answers one question per command. That is right for a script
+// `zpkgx ls` answers one question per command. That is right for a script
 // and wrong for a person who does not yet know what they are looking for:
 // finding `curl.se/ca-certs` from `curl.se` costs two commands and knowing
 // that the trailing slash exists. `nix-tree` is the precedent — it is a
@@ -31,7 +31,7 @@ import (
 //
 // # WITHOUT A TTY IT IS NOT AN ERROR
 //
-// `pkgx browse | less`, a CI log, a scratch image with no terminal: it
+// `zpkgx browse | less`, a CI log, a scratch image with no terminal: it
 // prints the tree and exits. A command that refuses to work when its output
 // is a pipe is a command people stop putting in scripts, and the data is
 // the same data either way.
@@ -60,7 +60,7 @@ func runBrowse(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"ZPKG_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	if len(cat.Projects) == 0 {
@@ -69,7 +69,7 @@ func runBrowse(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	// No terminal: print and leave. Checked on the FILE, not on a flag,
-	// because `pkgx browse | less` and a CI log are the same case and
+	// because `zpkgx browse | less` and a CI log are the same case and
 	// neither of them passed a flag.
 	f, ok := stdin.(*os.File)
 	if !ok || !termIsTerminal(int(f.Fd())) {
@@ -132,7 +132,7 @@ func (b *browser) rows() []string {
 
 // pin adds or removes a project from what the exit line will print.
 //
-// `pkgx +$(pkgx browse)` is the shape this is for, which is why q prints
+// `zpkgx +$(zpkgx browse)` is the shape this is for, which is why q prints
 // the pins to STDOUT and everything else goes to stderr: the browser's
 // chrome must not end up in a shell's command line.
 func (b *browser) pin(p string) {

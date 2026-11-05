@@ -9,12 +9,12 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // bottleNoBottleErr is the real error bottle raises when a project exists
 // but has no bottle for this platform — the one `sayHowToAsk` turns into the
-// `pkgs request` hint. Using bottle's own type rather than a lookalike is
+// `zpkgs request` hint. Using bottle's own type rather than a lookalike is
 // what keeps the journal's taxonomy tied to the hint's.
 func bottleNoBottleErr(project string) error {
 	return &bottle.NoBottleHereError{Project: project}
@@ -23,8 +23,8 @@ func bottleNoBottleErr(project string) error {
 func journalStore(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("PKGX_DIR", dir)
-	t.Setenv("PKGX_JOURNAL", "")
+	t.Setenv("ZPKG_DIR", dir)
+	t.Setenv("ZPKG_JOURNAL", "")
 	return dir
 }
 
@@ -59,7 +59,7 @@ func TestJournalRecordsOtherFailuresWithoutAProject(t *testing.T) {
 }
 
 // ⛔ THE JOURNAL MUST NOT BREAK THE COMMAND IT RECORDS. A store that cannot
-// be written is a reason for the diary to stay empty, not for `pkgx node` to
+// be written is a reason for the diary to stay empty, not for `zpkgx node` to
 // fail, so recordFailure reports nothing and must not panic.
 func TestJournalSurvivesAnUnwritableStore(t *testing.T) {
 	dir := t.TempDir()
@@ -67,17 +67,17 @@ func TestJournalSurvivesAnUnwritableStore(t *testing.T) {
 	if err := os.WriteFile(blocked, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PKGX_DIR", filepath.Join(blocked, "store"))
-	t.Setenv("PKGX_JOURNAL", "")
+	t.Setenv("ZPKG_DIR", filepath.Join(blocked, "store"))
+	t.Setenv("ZPKG_JOURNAL", "")
 	recordFailure(errors.New("boom")) // must simply do nothing
 }
 
 // ⛔ IT MUST NOT CARRY WHAT IT CANNOT PRINT. The text is an error string, and
 // those quote names read out of a catalogue, a registry index or a
-// downloaded binary. What is written now is printed later by `pkgs journal`.
+// downloaded binary. What is written now is printed later by `zpkgs journal`.
 func TestJournalStripsWhatWouldReachATerminal(t *testing.T) {
 	journalStore(t)
-	recordFailure(errors.New("harmless\x1b[2K\rpkgx  SAFE\x00\x07 and\na newline"))
+	recordFailure(errors.New("harmless\x1b[2K\rzpkgx  SAFE\x00\x07 and\na newline"))
 
 	got := readJournal(journalPath())
 	if len(got) != 1 {
@@ -151,16 +151,16 @@ func TestJournalBoundsOneField(t *testing.T) {
 // none, and the command says so rather than printing an empty list.
 func TestJournalCanBeTurnedOff(t *testing.T) {
 	journalStore(t)
-	t.Setenv("PKGX_JOURNAL", "0")
+	t.Setenv("ZPKG_JOURNAL", "0")
 	recordFailure(errors.New("not recorded"))
 	if got := readJournal(journalPath()); len(got) != 0 {
-		t.Fatalf("PKGX_JOURNAL=0 still recorded %+v", got)
+		t.Fatalf("ZPKG_JOURNAL=0 still recorded %+v", got)
 	}
 	var out, errb strings.Builder
 	if code := runJournal(nil, &out, &errb); code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
-	if !strings.Contains(out.String(), "PKGX_JOURNAL is off") {
+	if !strings.Contains(out.String(), "ZPKG_JOURNAL is off") {
 		t.Errorf("the reason for the silence is not stated:\n%s", out.String())
 	}
 }

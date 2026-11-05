@@ -4,7 +4,7 @@ package app
 // people, and the reason `module load cfd` can mean something without a
 // hand-written modulefile behind it.
 //
-//	# ~/.pkgx/environments/site.hcl2      (or $PKGX_DIR/environments/*.hcl2)
+//	# ~/.pkgx/environments/site.hcl2      (or $ZPKG_DIR/environments/*.hcl2)
 //	env "cfd" {
 //	  description = "the solver stack, as validated on 2026-09-01"
 //	  packages    = ["openmpi.org@5", "hdf5.org", "python.org@3.12"]
@@ -42,7 +42,7 @@ type environment struct {
 
 	// The raw environment operations an IMPORTED modulefile carries. A site's
 	// modulefile points at trees the site installed, not at bottles, so there is
-	// no package to name — `pkgx env import` converts those statements into
+	// no package to name — `zpkgx env import` converts those statements into
 	// these, once, in front of a person.
 	Prepend  map[string][]string
 	Append   map[string][]string
@@ -70,13 +70,13 @@ var envBodySchema = &hcl.BodySchema{
 
 // environmentDirs lists the directories scanned for *.hcl2, nearest last so a
 // user's own file wins over a site's.
-func environmentDirs(pkgxDir, home string) []string {
+func environmentDirs(zpkgxDir, home string) []string {
 	var dirs []string
-	if v := os.Getenv("PKGX_ENVIRONMENTS"); v != "" {
+	if v := os.Getenv("ZPKG_ENVIRONMENTS"); v != "" {
 		dirs = append(dirs, filepath.SplitList(v)...)
 	}
-	if pkgxDir != "" {
-		dirs = append(dirs, filepath.Join(pkgxDir, "environments"))
+	if zpkgxDir != "" {
+		dirs = append(dirs, filepath.Join(zpkgxDir, "environments"))
 	}
 	if home != "" {
 		dirs = append(dirs, filepath.Join(home, ".pkgx", "environments"))
@@ -136,12 +136,12 @@ func parseEnvironmentFile(path string, warn func(string)) map[string]environment
 			// Iterate rather than gocty.FromCtyValue: HCL types a literal
 			// ["a","b"] as a TUPLE, not a list, so asking for []string fails with
 			// "list or set value is required" on a file that is perfectly correct.
-			pkgs, err := stringsOf(v)
+			zpkgs, err := stringsOf(v)
 			if err != nil {
 				warn(fmt.Sprintf("ignoring env %q in %s: packages must be a list of strings: %v", name, path, err))
 				continue
 			}
-			e.Packages = pkgs
+			e.Packages = zpkgs
 		}
 		if attr, ok := body.Attributes["description"]; ok {
 			if v, diags := attr.Expr.Value(nil); !diags.HasErrors() && v.Type() == cty.String {
@@ -233,7 +233,7 @@ func expandSpecs(specs []string, envs map[string]environment) []string {
 }
 
 // envLockWarn is where a lock's complaints go: stderr, never stdout, since
-// `eval "$(pkge load cfd)"` is reading the other one.
+// `eval "$(zpkge load cfd)"` is reading the other one.
 var envLockWarn = func(msg string) { fmt.Fprintln(os.Stderr, tool+":", msg) }
 
 // sortedEnvironments returns the environments by name, for `avail`.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // A catalogue is published PER PLATFORM because what is available differs
@@ -73,7 +73,7 @@ func TestTheTreeMarksADependencyWithNoBottleHere(t *testing.T) {
 	}
 }
 
-// And the project's own line says it, so `pkgx ls doxygen.nl` answers the
+// And the project's own line says it, so `zpkgx ls doxygen.nl` answers the
 // question somebody typed it to ask.
 func TestLsOnTheProjectItselfSaysIt(t *testing.T) {
 	withCatalog(t, sweptCatalog(), nil)

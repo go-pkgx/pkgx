@@ -16,7 +16,7 @@ package main
 import (
 	"os"
 
-	"github.com/go-pkgx/pkgx/internal/app"
+	"github.com/go-zpkg/zpkgx/internal/app"
 )
 
 func main() { os.Exit(app.Pkgs(os.Args[1:])) }

@@ -17,9 +17,9 @@ var importEnvSchema = hcl.BodySchema{
 // ⛔ A MODULEFILE IS SOMEBODY ELSE'S FILE, AND writeHCL GENERATES CONFIG WE
 // LATER EVALUATE.
 //
-// `pkgs env import` exists to convert an HPC site's Lmod/Environment Modules
+// `zpkgs env import` exists to convert an HPC site's Lmod/Environment Modules
 // tree — files this project did not write — into an HCL2 env block that
-// `pkgx env` then loads. So the generated file is the boundary: anything an
+// `zpkgx env` then loads. So the generated file is the boundary: anything an
 // imported file can put into it, it can put into the environment.
 //
 // writeHCL escapes every VALUE with %q and wrote every KEY with %s. An

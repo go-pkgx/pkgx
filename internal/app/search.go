@@ -6,10 +6,10 @@ import (
 	"io"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
-// `pkgx search` — for when you know the COMMAND and not the package.
+// `zpkgx search` — for when you know the COMMAND and not the package.
 //
 // # WHY NOT A DESCRIPTION SEARCH
 //
@@ -35,7 +35,7 @@ import (
 // a PREFIX on the project path — never will either. Completion and search
 // are different tools and this is the line between them.
 //
-// Offline, from the catalogue `pkgx catalog update` wrote, like everything
+// Offline, from the catalogue `zpkgx catalog update` wrote, like everything
 // else that reads it.
 func runSearch(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
@@ -52,12 +52,12 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 
 	cat, src, err := browseCatalog(bottle.Dir())
 	if err != nil {
-		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", src, err)
+		fmt.Fprintf(stderr, pfx()+"ZPKG_CATALOG names %s and it cannot be read: %v\n", src, err)
 		return 2
 	}
 	hits := cat.Search(query)
 	if len(hits) == 0 {
-		// Said on STDERR and exiting 1, so `pkgx search x || echo none`
+		// Said on STDERR and exiting 1, so `zpkgx search x || echo none`
 		// works and a shell pipeline is not fed a reassuring silence.
 		fmt.Fprintf(stderr, pfx()+"nothing matches %q in %s\n", query, src)
 		if !knowsCommands(cat) {
@@ -102,7 +102,7 @@ const proseFloor = 5
 // not packaged. That is the quietest kind of wrong answer, and one line of
 // stderr is the whole fix.
 //
-// On stderr, so `pkgs search x > list` still writes only results; and only
+// On stderr, so `zpkgs search x > list` still writes only results; and only
 // when the catalogue really is thin, so a future one with descriptions is
 // silent rather than nagging.
 func sayProseIsThin(cat bottle.Catalog, stderr io.Writer) {

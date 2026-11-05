@@ -288,7 +288,7 @@ var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 //
 // ⛔ THIS IS A BOUNDARY, NOT A TIDINESS CHECK. A modulefile is somebody
 // else's file — the whole point of `env import` is converting an HPC site's
-// tree — and writeHCL generates config that `pkgx env` later evaluates. The
+// tree — and writeHCL generates config that `zpkgx env` later evaluates. The
 // generated file escaped every VALUE with %q and wrote every KEY raw, so a
 // name carrying a quote, a newline or an `=` closed the attribute it was in
 // and opened whatever came next:
@@ -439,7 +439,7 @@ func hclKey(k string) string {
 
 // writeHCL renders one conversion as an HCL2 env block.
 func writeHCL(m modImport, w io.Writer) {
-	fmt.Fprintf(w, "# imported from %s by `pkgx env import`.\n", m.Source)
+	fmt.Fprintf(w, "# imported from %s by `zpkgx env import`.\n", m.Source)
 	fmt.Fprintln(w, "# Every statement in that file was recognised; nothing was skipped.")
 	fmt.Fprintf(w, "env %q {\n", m.Name)
 	if m.Description != "" {

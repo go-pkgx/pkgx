@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // An environment can have a LOCK beside it.
@@ -21,7 +21,7 @@ import (
 // because the lock belongs to the environment.
 //
 // Nix and Guix solve the same problem from the other end — `flake.lock`
-// pins the nixpkgs INPUT, `channels.scm` pins "all of Guix" — so neither
+// pins the nixzpkgs INPUT, `channels.scm` pins "all of Guix" — so neither
 // has a resolved-version lock to attach to anything. Three systems, two
 // answers, and only one of them is about versions.
 //
@@ -135,7 +135,7 @@ func lockedSpecsFor(d bottle.Lock) []string {
 	return out
 }
 
-// describeEnvLock is the line `pkgx env show` prints about the pairing.
+// describeEnvLock is the line `zpkgx env show` prints about the pairing.
 func describeEnvLock(e environment, w io.Writer) {
 	p := envLockPath(e)
 	if p == "" {

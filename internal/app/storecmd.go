@@ -8,15 +8,15 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
-// `pkgx store` — what is on this disk, which nothing could show.
+// `zpkgx store` — what is on this disk, which nothing could show.
 //
 // # WHY
 //
-// Every ephemeral `pkgx <pkg>` leaves its bottles in
-// $PKGX_DIR/<project>/v<version>, and nothing ever removes one. `pkgm list`
+// Every ephemeral `zpkgx <pkg>` leaves its bottles in
+// $ZPKG_DIR/<project>/v<version>, and nothing ever removes one. `zpkgm list`
 // answers a different question — what did I ask to have installed — and a
 // bottle pulled to run one command six months ago is in neither.
 //
@@ -38,7 +38,7 @@ import (
 // # IT WALKS, SO IT IS SECONDS
 //
 // Eight seconds over 41 GiB on an SSD. That is why it is its own command
-// and not a line in `pkgx catalog`: nothing on the completion path may cost
+// and not a line in `zpkgx catalog`: nothing on the completion path may cost
 // that, and a figure worth having is worth waiting for once.
 func runStore(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("store", flag.ContinueOnError)
@@ -85,21 +85,21 @@ func runStore(args []string, stdout, stderr io.Writer) int {
 	// A FROM scratch image ships a catalogue and no bottles, so its store
 	// directory EXISTS and holds nothing. The first version printed
 	//
-	//	/pkgx
+	//	/zpkgx
 	//
 	//	0 B over 0 version(s) of 0 project(s)
 	//
 	// which is correct and tells nobody anything. Found by running it in
 	// the image rather than by reading the function.
 	if err == nil && len(entries) == 0 {
-		fmt.Fprintf(stdout, "%s\nnothing here yet — a store fills up the first time pkgx runs something\n", dir)
+		fmt.Fprintf(stdout, "%s\nnothing here yet — a store fills up the first time zpkgx runs something\n", dir)
 		return 0
 	}
 	if err != nil {
 		if os.IsNotExist(err) {
 			// An absent store is the state of every fresh machine, and the
 			// useful thing to print is where it would be.
-			fmt.Fprintf(stdout, "%s\nnothing here yet — a store fills up the first time pkgx runs something\n", dir)
+			fmt.Fprintf(stdout, "%s\nnothing here yet — a store fills up the first time zpkgx runs something\n", dir)
 			return 0
 		}
 		fmt.Fprintf(stderr, pfx()+"%s: %v\n", dir, err)

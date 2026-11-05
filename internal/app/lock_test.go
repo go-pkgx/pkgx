@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 func withLock(t *testing.T, d bottle.Lock, err error) {
@@ -141,7 +141,7 @@ func TestAnUnreadableLockFails(t *testing.T) {
 }
 
 func TestLockIsInTheUsage(t *testing.T) {
-	if !strings.Contains(usage, "pkgx --lock") {
+	if !strings.Contains(usage, "zpkgx --lock") {
 		t.Error("usage does not mention --lock")
 	}
 }

@@ -22,8 +22,8 @@ import (
 // So: every advertised subcommand must be REACHABLE, and every reachable
 // one must be ADVERTISED, both ways round.
 //
-// ⛔ THE SURFACE IS `pkgs`'s NOW, and there is a FOURTH list since the
-// split: pkgx's own usage, which names the same verbs to point at the other
+// ⛔ THE SURFACE IS `zpkgs`'s NOW, and there is a FOURTH list since the
+// split: zpkgx's own usage, which names the same verbs to point at the other
 // binary. All four are checked here, because the failure that prompted this
 // comment — a verb in one list and not the others — got a new way to happen
 // the moment there were two programs.
@@ -46,19 +46,19 @@ func TestTheCommandSurfaceAgreesWithItself(t *testing.T) {
 		// as well not exist.
 		//
 		// The line, not a substring anywhere: `strings.Contains(usage,
-		// "pkgx browse")` passes on a usage with no browse entry at all,
-		// because browse's own help text says `pkgx +$(pkgx browse)` and
+		// "zpkgx browse")` passes on a usage with no browse entry at all,
+		// because browse's own help text says `zpkgx +$(zpkgx browse)` and
 		// the grep matches that mention. Found by mutating the usage and
 		// watching the suite stay green.
-		if !usageListsCommand(pkgsUsage, "pkgs", name) {
-			t.Errorf("%q is offered at <TAB> but has no line in the pkgs usage", name)
+		if !usageListsCommand(zpkgsUsage, "zpkgs", name) {
+			t.Errorf("%q is offered at <TAB> but has no line in the zpkgs usage", name)
 		}
-		// And pkgx NAMES it, on a line of its own, because the verb used to
-		// be pkgx's: a help text that simply stopped mentioning `ls` would
+		// And zpkgx NAMES it, on a line of its own, because the verb used to
+		// be zpkgx's: a help text that simply stopped mentioning `ls` would
 		// read as "removed" rather than "moved", and the reader would have
 		// no way to find where it went.
-		if !usageListsCommand(usage, "pkgs", name) {
-			t.Errorf("%q is a pkgs verb that pkgx's usage does not point at", name)
+		if !usageListsCommand(usage, "zpkgs", name) {
+			t.Errorf("%q is a zpkgs verb that zpkgx's usage does not point at", name)
 		}
 
 		// ADVERTISED ⇒ REACHABLE. Run it with no arguments and require
@@ -106,7 +106,7 @@ func runSurface(t *testing.T, name string) (int, string, string) {
 	go func() { b, _ := io.ReadAll(r); done <- string(b) }()
 
 	var code int
-	// ⛔ THROUGH Pkgs. Through `run` it would be pkgx, where these words are
+	// ⛔ THROUGH Pkgs. Through `run` it would be zpkgx, where these words are
 	// package names — and `run(["env"])` execve's the system env, replacing
 	// the test binary mid-suite. That is not a hypothetical: it happened
 	// while this split was being made, and `go test` reported FAIL with no
@@ -124,9 +124,9 @@ func runSurface(t *testing.T, name string) (int, string, string) {
 // — a line whose first two words are the binary and the verb — rather than a
 // mention of it somewhere in another entry's prose.
 //
-// The line, not a substring anywhere: `strings.Contains(usage, "pkgs
+// The line, not a substring anywhere: `strings.Contains(usage, "zpkgs
 // browse")` passes on a usage with no browse entry at all, because browse's
-// own help text says `pkgx +$(pkgs browse)` and the grep matches that
+// own help text says `zpkgx +$(zpkgs browse)` and the grep matches that
 // mention. Found by mutating the usage and watching the suite stay green.
 func usageListsCommand(text, binary, name string) bool {
 	for _, line := range strings.Split(text, "\n") {

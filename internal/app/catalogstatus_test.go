@@ -9,13 +9,13 @@ import (
 )
 
 // ⛔ TestCatalogStatusNamesTheCatalogueItWouldRead is the whole point of
-// `pkgs catalog`. It answers "what am I looking at", and it used to answer
+// `zpkgs catalog`. It answers "what am I looking at", and it used to answer
 // about the host's file while `ls`, `search` and <TAB> — which go through
-// catalogFor — had just read the one PKGX_CATALOG names. That is the defect
-// go-pkgx/pkgx#110 describes, in the one place where a wrong answer cannot be
+// catalogFor — had just read the one ZPKG_CATALOG names. That is the defect
+// go-zpkg/zpkgx#110 describes, in the one place where a wrong answer cannot be
 // caught by comparing it with anything else on screen.
 //
-// Observed before the fix: `PKGX_CATALOG=…/linux-x86-64.json pkgs catalog`
+// Observed before the fix: `ZPKG_CATALOG=…/linux-x86-64.json zpkgs catalog`
 // printed `…/darwin-aarch64.json` and that file's project count.
 func TestCatalogStatusNamesTheCatalogueItWouldRead(t *testing.T) {
 	dir := t.TempDir()
@@ -26,7 +26,7 @@ func TestCatalogStatusNamesTheCatalogueItWouldRead(t *testing.T) {
 	if err := os.WriteFile(named, []byte(catalogue), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PKGX_CATALOG", named)
+	t.Setenv("ZPKG_CATALOG", named)
 
 	var out, errOut bytes.Buffer
 	if code := catalogStatus(&out, &errOut); code != 0 {
@@ -48,13 +48,13 @@ func TestCatalogStatusNamesTheCatalogueItWouldRead(t *testing.T) {
 // "run catalog update" here would point at a file that is not the one they
 // named, and exit 0 would call a mistake a fresh machine.
 func TestCatalogStatusRefusesANamedFileItCannotRead(t *testing.T) {
-	t.Setenv("PKGX_CATALOG", filepath.Join(t.TempDir(), "absent.json"))
+	t.Setenv("ZPKG_CATALOG", filepath.Join(t.TempDir(), "absent.json"))
 
 	var out, errOut bytes.Buffer
 	if code := catalogStatus(&out, &errOut); code == 0 {
 		t.Errorf("catalogStatus = 0 for a named file that is absent; stdout was %q", out.String())
 	}
-	if !strings.Contains(errOut.String(), "PKGX_CATALOG") {
+	if !strings.Contains(errOut.String(), "ZPKG_CATALOG") {
 		t.Errorf("the refusal does not name the variable: %q", errOut.String())
 	}
 	if strings.Contains(out.String(), "catalog update") {
@@ -66,8 +66,8 @@ func TestCatalogStatusRefusesANamedFileItCannotRead(t *testing.T) {
 // useful output is the path and the command, not an error. Every fresh machine
 // is in this state, so it must not be a failure.
 func TestCatalogStatusStillGuidesAFreshMachine(t *testing.T) {
-	t.Setenv("PKGX_CATALOG", "")
-	t.Setenv("PKGX_DIR", t.TempDir())
+	t.Setenv("ZPKG_CATALOG", "")
+	t.Setenv("ZPKG_DIR", t.TempDir())
 
 	var out, errOut bytes.Buffer
 	if code := catalogStatus(&out, &errOut); code != 0 {

@@ -8,22 +8,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // ⛔ EVERY DIAGNOSTIC NAMES THE BINARY THE USER TYPED.
 //
-// The whole suite runs with tool == "pkgx" by default, so it passed
+// The whole suite runs with tool == "zpkgx" by default, so it passed
 // unchanged through the split — and that means nothing in it would have
-// noticed `pkgs catalog` printing "pkgx: usage: pkgx catalog …" and sending
+// noticed `zpkgs catalog` printing "zpkgx: usage: zpkgx catalog …" and sending
 // the reader to a command that no longer has the verb.
 func TestDiagnosticsNameTheBinaryTheUserTyped(t *testing.T) {
 	var errb bytes.Buffer
 	if code := runCatalogCmd([]string{"nonsense"}, &bytes.Buffer{}, &errb); code != 2 {
 		t.Fatalf("code = %d", code)
 	}
-	if got := errb.String(); !strings.HasPrefix(got, "pkgx: ") || !strings.Contains(got, "pkgx catalog") {
-		t.Errorf("under pkgx the usage read %q", got)
+	if got := errb.String(); !strings.HasPrefix(got, "zpkgx: ") || !strings.Contains(got, "zpkgx catalog") {
+		t.Errorf("under zpkgx the usage read %q", got)
 	}
 
 	asPkgs(t)
@@ -32,36 +32,36 @@ func TestDiagnosticsNameTheBinaryTheUserTyped(t *testing.T) {
 		t.Fatalf("code = %d", code)
 	}
 	got := errb.String()
-	if !strings.HasPrefix(got, "pkgs: ") {
-		t.Errorf("under pkgs the diagnostic is prefixed %q", got)
+	if !strings.HasPrefix(got, "zpkgs: ") {
+		t.Errorf("under zpkgs the diagnostic is prefixed %q", got)
 	}
-	if !strings.Contains(got, "pkgs catalog") {
-		t.Errorf("under pkgs the usage does not name pkgs: %q", got)
+	if !strings.Contains(got, "zpkgs catalog") {
+		t.Errorf("under zpkgs the usage does not name zpkgs: %q", got)
 	}
-	if strings.Contains(got, "pkgx") {
-		t.Errorf("under pkgs the usage still mentions pkgx: %q", got)
+	if strings.Contains(got, "zpkgx") {
+		t.Errorf("under zpkgs the usage still mentions zpkgx: %q", got)
 	}
 }
 
-// A word pkgs does not know is refused, and the refusal names the binary
+// A word zpkgs does not know is refused, and the refusal names the binary
 // that DOES run packages. Guessing between the two is how the grammar got
 // muddled in the first place.
 func TestPkgsRefusesAPackageAndSaysWhereToRunIt(t *testing.T) {
 	asPkgs(t)
 	code, _, errb := runSurface(t, "node")
 	if code != 2 {
-		t.Errorf("pkgs node = %d, want 2", code)
+		t.Errorf("zpkgs node = %d, want 2", code)
 	}
-	for _, want := range []string{"is not a pkgs command", "pkgx node"} {
+	for _, want := range []string{"is not a zpkgs command", "zpkgx node"} {
 		if !strings.Contains(errb, want) {
 			t.Errorf("refusal %q does not mention %q", errb, want)
 		}
 	}
 }
 
-// ⛔ THE CONTROL IN THE OTHER DIRECTION. `pkgx ls` must reach the PACKAGE,
+// ⛔ THE CONTROL IN THE OTHER DIRECTION. `zpkgx ls` must reach the PACKAGE,
 // because that is the entire point of the split: gnu.org/coreutils provides
-// ls, and upstream pkgx runs it. unknownVerb must stay silent whenever the
+// ls, and upstream zpkgx runs it. unknownVerb must stay silent whenever the
 // catalogue has something by that name, or the defect is back with a
 // friendlier message.
 func TestPkgxDoesNotInterceptAVerbThatIsAlsoAPackage(t *testing.T) {
@@ -76,7 +76,7 @@ func TestPkgxDoesNotInterceptAVerbThatIsAlsoAPackage(t *testing.T) {
 	for _, word := range []string{"ls", "env"} {
 		var errb bytes.Buffer
 		if code, said := unknownVerb(word, &errb); said {
-			t.Errorf("pkgx %s was intercepted (code=%d, %q) — coreutils provides it", word, code, errb.String())
+			t.Errorf("zpkgx %s was intercepted (code=%d, %q) — coreutils provides it", word, code, errb.String())
 		}
 	}
 }
@@ -90,9 +90,9 @@ func TestPkgxPointsAtPkgsForAVerbNoPackageProvides(t *testing.T) {
 	var errb bytes.Buffer
 	code, said := unknownVerb("why", &errb)
 	if !said || code != 2 {
-		t.Fatalf("pkgx why: said=%v code=%d", said, code)
+		t.Fatalf("zpkgx why: said=%v code=%d", said, code)
 	}
-	for _, want := range []string{"pkgs command", "pkgs why"} {
+	for _, want := range []string{"zpkgs command", "zpkgs why"} {
 		if !strings.Contains(errb.String(), want) {
 			t.Errorf("%q does not mention %q", errb.String(), want)
 		}
@@ -109,7 +109,7 @@ func TestUnknownVerbIgnoresWhatIsNotAVerb(t *testing.T) {
 	}
 }
 
-// `pkgx -Q`, upstream's query mode, which this fork never had — and whose
+// `zpkgx -Q`, upstream's query mode, which this fork never had — and whose
 // absence is why nine verbs were put in the position upstream reserves for
 // a package.
 func TestQueryAnswersWhatProvidesACommand(t *testing.T) {
@@ -170,7 +170,7 @@ func TestCompletionSnippetCoversBothBinaries(t *testing.T) {
 			t.Fatalf("%s = %d", shell, code)
 		}
 		s := out.String()
-		for _, want := range []string{"pkgx", "pkgs"} {
+		for _, want := range []string{"zpkgx", "zpkgs"} {
 			if !strings.Contains(s, want) {
 				t.Errorf("the %s snippet never mentions %s:\n%s", shell, want, s)
 			}
@@ -191,14 +191,14 @@ func TestCompletionSnippetCoversBothBinaries(t *testing.T) {
 	}
 }
 
-// pkgx's own <TAB> must NOT offer the verbs: they are pkgs's, and a
+// zpkgx's own <TAB> must NOT offer the verbs: they are zpkgs's, and a
 // completion shows a word with no provenance — the one place a reader
 // cannot tell which of the two they are being offered.
 func TestPkgxCompletionDoesNotOfferPkgsVerbs(t *testing.T) {
 	withCatalog(t, browseCat(), nil)
 	for _, c := range completionsFor("l") {
 		if c.value == "ls" {
-			t.Errorf("pkgx l<TAB> offers the pkgs verb ls")
+			t.Errorf("zpkgx l<TAB> offers the zpkgs verb ls")
 		}
 	}
 	asPkgs(t)
@@ -209,13 +209,13 @@ func TestPkgxCompletionDoesNotOfferPkgsVerbs(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("pkgs l<TAB> does not offer ls")
+		t.Error("zpkgs l<TAB> does not offer ls")
 	}
 }
 
 // ⛔ THE WORD THE USER TYPED IS THE PROGRAM THAT RUNS.
 //
-// Found by running the thing: `pkgx ls --version` printed
+// Found by running the thing: `zpkgx ls --version` printed
 //
 //	[ (GNU coreutils) 9.11
 //	Written by Kevin Braunsdorf and Matthew Bradburn
@@ -225,7 +225,7 @@ func TestPkgxCompletionDoesNotOfferPkgsVerbs(t *testing.T) {
 // primary program is its first `provides` entry. It looked plausible enough
 // that only the authors' names gave it away.
 //
-// Nobody had met it because `ls` was a pkgx subcommand until this change and
+// Nobody had met it because `ls` was a zpkgx subcommand until this change and
 // never reached the package path at all. Giving the word back to the
 // registry uncovered it.
 func TestABareCommandRunsThatCommandNotTheProjectsFirstBinary(t *testing.T) {
@@ -252,7 +252,7 @@ func TestABareCommandRunsThatCommandNotTheProjectsFirstBinary(t *testing.T) {
 	}
 
 	// ⛔ THE CONTROL. A PROJECT name carries no command, so the primary
-	// program must still win — `pkgx gnu.org/bash` has to run bash, and a
+	// program must still win — `zpkgx gnu.org/bash` has to run bash, and a
 	// fix that always preferred the typed word would have nothing to prefer
 	// here and must not break.
 	got, err = resolveBin(proj, "", nil, closure, dir)
@@ -334,7 +334,7 @@ func TestTheReleaseStampsThisPackagesVersion(t *testing.T) {
 		t.Skipf("no release workflow to read here: %v", err)
 	}
 	wf := string(b)
-	const want = "-X github.com/go-pkgx/pkgx/internal/app.version="
+	const want = "-X github.com/go-zpkg/zpkgx/internal/app.version="
 	if !strings.Contains(wf, want) {
 		t.Errorf("release.yml does not stamp %q — the binaries would print %q", want, version)
 	}
@@ -343,7 +343,7 @@ func TestTheReleaseStampsThisPackagesVersion(t *testing.T) {
 		t.Error("release.yml still stamps main.version, a symbol neither main declares")
 	}
 	// Both binaries are built, or a release ships half of itself.
-	for _, pkg := range []string{`-o "$DIST/${out}" "$pkg"`, "./cmd/pkgs"} {
+	for _, pkg := range []string{`-o "$DIST/${out}" "$pkg"`, "./cmd/zpkgs"} {
 		if !strings.Contains(wf, pkg) {
 			t.Errorf("release.yml does not look like it builds both binaries: %q is absent", pkg)
 		}
@@ -398,33 +398,33 @@ func TestTheReleaseAttestsWhatItPublishes(t *testing.T) {
 		t.Errorf("the steps run guard=%d attest=%d publish=%d; attestation must sit between the guard and the publish", guard, attest, publish)
 	}
 	// Both binaries, or half a release is signed and half is not.
-	for _, subject := range []string{"dist/pkgx-*", "dist/pkgs-*"} {
+	for _, subject := range []string{"dist/zpkgx-*", "dist/zpkgs-*"} {
 		if !strings.Contains(wf, subject) {
 			t.Errorf("release.yml does not attest %q", subject)
 		}
 	}
 }
 
-// ⛔ A STALE pkge PROFILE GETS A POINTER, NOT GNU env's ERROR.
+// ⛔ A STALE zpkge PROFILE GETS A POINTER, NOT GNU env's ERROR.
 //
-// Measured against the real binaries after the split: `pkgx env load foo`
+// Measured against the real binaries after the split: `zpkgx env load foo`
 // printed
 //
 //	env: 'load': No such file or directory      (exit 127)
 //
-// because gnu.org/coreutils provides `env`, so pkgx ran it — correctly, by
-// the grammar — and the generated pkge function in every profile written
+// because gnu.org/coreutils provides `env`, so zpkgx ran it — correctly, by
+// the grammar — and the generated zpkge function in every profile written
 // before today calls exactly that. Of the nine moved verbs it is the only
 // one that is both provided by a package and baked into something users
 // already have.
 func TestAStalePkgeProfileIsToldWhereEnvWent(t *testing.T) {
-	for _, sub := range pkgeSubcommands {
+	for _, sub := range zpkgeSubcommands {
 		var errb bytes.Buffer
 		code, said := staleEnvCall([]string{"env", sub, "foo"}, &errb)
 		if !said || code != 2 {
 			t.Fatalf("env %s: said=%v code=%d", sub, said, code)
 		}
-		for _, want := range []string{"pkgs env " + sub, "eval \"$(pkgs env init)\""} {
+		for _, want := range []string{"zpkgs env " + sub, "eval \"$(zpkgs env init)\""} {
 			if !strings.Contains(errb.String(), want) {
 				t.Errorf("env %s: %q does not mention %q", sub, errb.String(), want)
 			}
@@ -433,8 +433,8 @@ func TestAStalePkgeProfileIsToldWhereEnvWent(t *testing.T) {
 }
 
 // ⛔ AND GNU env STILL RUNS. The note is one word wide on purpose: it must
-// not turn `pkgx env` into a verb again, which is the thing the split
-// removed. Anything that is not a pkge subcommand falls straight through to
+// not turn `zpkgx env` into a verb again, which is the thing the split
+// removed. Anything that is not a zpkge subcommand falls straight through to
 // the package path.
 func TestEnvWithAnythingElseStillReachesCoreutils(t *testing.T) {
 	for _, argv := range [][]string{
@@ -465,7 +465,7 @@ func TestEnvWithAnythingElseStillReachesCoreutils(t *testing.T) {
 // That is not hypothetical; it is how TestEnvVerb failed during the split.
 //
 // So: a catalogue in which NOTHING provides `env`. Both paths then return 2
-// and the TEXT is what separates them — unknownVerb says "is a pkgs
+// and the TEXT is what separates them — unknownVerb says "is a zpkgs
 // command", staleEnvCall says how to repair the profile. Asserting the
 // repair line asserts the wiring.
 func TestTheEnvNoteIsWiredIntoRun(t *testing.T) {
@@ -476,12 +476,12 @@ func TestTheEnvNoteIsWiredIntoRun(t *testing.T) {
 	if code != 2 {
 		t.Fatalf("code = %d, want 2 (%s)", code, errb)
 	}
-	if !strings.Contains(errb, `eval "$(pkgs env init)"`) {
+	if !strings.Contains(errb, `eval "$(zpkgs env init)"`) {
 		t.Errorf("run did not reach the stale-profile note: %q", errb)
 	}
 }
 
-// capturePkgx drives `run` — pkgx's entry point — and returns its exit code
+// capturePkgx drives `run` — zpkgx's entry point — and returns its exit code
 // and stderr. A sibling of runSurface, which drives Pkgs; the two binaries
 // need two helpers because the whole point is that they answer differently.
 func capturePkgx(t *testing.T, argv ...string) (int, string) {

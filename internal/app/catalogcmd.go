@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
-// `pkgx catalog` — the ONE path that talks to the registry about what exists.
+// `zpkgx catalog` — the ONE path that talks to the registry about what exists.
 //
 // # WHY A FETCH IS A COMMAND AND NOT A SIDE EFFECT
 //
@@ -19,7 +19,7 @@ import (
 // fail. A shell that pauses on TAB is a shell the user stops pressing TAB
 // in.
 //
-// Before this, every TAB spawned a `pkgx` that fetched an OCI token and
+// Before this, every TAB spawned a `zpkgx` that fetched an OCI token and
 // pulled the catalogue bottle — 470 KB as measured 2026-10-11, and ~200 KB
 // when this was written, because `bk catalog --versions` grew it; the figure
 // carries its date for exactly that reason — once per press, with no reuse
@@ -32,7 +32,7 @@ import (
 // index is a thing you refresh, not a thing every command re-derives.
 //
 // The cost is that a catalogue goes stale and nobody is told by magic.
-// That is paid for by saying the age on every `pkgx ls`, and by this
+// That is paid for by saying the age on every `zpkgx ls`, and by this
 // command printing it too.
 func runCatalogCmd(args []string, stdout, stderr io.Writer) int {
 	switch {
@@ -63,7 +63,7 @@ func runCatalogCmd(args []string, stdout, stderr io.Writer) int {
 // # WHY
 //
 // ⛔ A CALLER COULD ASK "IS THIS ONE PUBLISHED", ONE GUESS AT A TIME, AND
-// NOT "WHICH ARE". Measured 2026-10-20: go-pkgx/packages' daily CVE scan
+// NOT "WHICH ARE". Measured 2026-10-20: go-zpkg/packages' daily CVE scan
 // carried its platform list in the workflow file, the list said two, and
 // the registry publishes six. The four nobody asked about were clean, so
 // the cost was coverage rather than an exposure — but a list copied into a
@@ -130,8 +130,8 @@ func catalogReindex(stdout, stderr io.Writer) int {
 
 // catalogPath is where the fetched catalogue lives, per platform.
 //
-// Under $PKGX_DIR rather than a cache directory, because it is not a cache:
-// nothing re-derives it on a miss, and losing it changes what `pkgx ls`
+// Under $ZPKG_DIR rather than a cache directory, because it is not a cache:
+// nothing re-derives it on a miss, and losing it changes what `zpkgx ls`
 // can answer. It belongs with the store it describes — and a scratch image
 // that ships one just drops the file in beside the packages.
 func catalogPath(osn, arch string) string {
@@ -140,7 +140,7 @@ func catalogPath(osn, arch string) string {
 
 // catalogAbsent says whether there is simply NO catalogue here, as opposed
 // to one that exists and could not be read. The caller prints a different
-// sentence for each, because "run pkgx catalog update" is the fix for the
+// sentence for each, because "run zpkgx catalog update" is the fix for the
 // first and no help at all for the second.
 func catalogAbsent() bool {
 	osn, arch := bottle.HostSlug()
@@ -155,12 +155,12 @@ func catalogAbsent() bool {
 // otherwise be asked at all. `fetchCatalogFor` always took os and arch; only
 // this command pinned them to the host, and that single line was enough to
 // make two measurements impossible from this machine: whether a darwin/x86-64
-// bottle starts (go-pkgx/packages#330) and what `bk vulnfetch -catalog` would
+// bottle starts (go-zpkg/packages#330) and what `bk vulnfetch -catalog` would
 // report for linux before a CI job is wired to run it. An answer that needs a
 // second machine is an answer nobody checks.
 //
 // It writes to that platform's own path, so a foreign catalogue cannot be
-// mistaken for the host's: `pkgx ls` reads catalog/<host>.json and will not
+// mistaken for the host's: `zpkgx ls` reads catalog/<host>.json and will not
 // see it.
 func catalogUpdate(osn, arch string, stdout, stderr io.Writer) int {
 	c, err := fetchCatalogFor(osn, arch)
@@ -215,15 +215,15 @@ func catalogUpdate(osn, arch string, stdout, stderr io.Writer) int {
 // other command in this binary would read.
 //
 // ⛔ IT USED TO NAME A DIFFERENT FILE. It went straight to catalogPath while
-// `ls`, `search` and <TAB> go through catalogFor, which honours PKGX_CATALOG.
+// `ls`, `search` and <TAB> go through catalogFor, which honours ZPKG_CATALOG.
 // So with that variable set, the command whose entire job is "what am I
 // looking at" answered about the host's catalogue while the previous command
-// had read the named one — the same defect as go-pkgx/pkgx#110, in the one
+// had read the named one — the same defect as go-zpkg/zpkgx#110, in the one
 // place where a wrong answer cannot be caught by comparing it with anything.
 func catalogStatus(stdout, stderr io.Writer) int {
 	osn, arch := bottle.HostSlug()
 	p := catalogPath(osn, arch)
-	named := os.Getenv("PKGX_CATALOG")
+	named := os.Getenv("ZPKG_CATALOG")
 	if named != "" {
 		p = named
 	}
@@ -232,7 +232,7 @@ func catalogStatus(stdout, stderr io.Writer) int {
 		// NAMED and unreadable is a user's mistake, and browseCatalog
 		// already refuses to paper over it. Printing "run catalog update"
 		// here would point at a file that is not the one they named.
-		fmt.Fprintf(stderr, pfx()+"PKGX_CATALOG names %s and it cannot be read: %v\n", named, err)
+		fmt.Fprintf(stderr, pfx()+"ZPKG_CATALOG names %s and it cannot be read: %v\n", named, err)
 		return 1
 	}
 	if err != nil {

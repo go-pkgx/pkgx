@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 func commandCatalog() bottle.Catalog {
@@ -20,7 +20,7 @@ func commandCatalog() bottle.Catalog {
 	}
 }
 
-// The reported command: `pkgx node --version` must reach nodejs.org. One
+// The reported command: `zpkgx node --version` must reach nodejs.org. One
 // provider, so it resolves, and with no constraint the matcher's "any" is
 // what comes back — not an empty string, and not "*" glued to the name.
 func TestResolveMapsACommandToItsProject(t *testing.T) {
@@ -61,7 +61,7 @@ func TestResolveKeepsTheConstraintInBothForms(t *testing.T) {
 }
 
 // A project name is answered WITHOUT the catalogue being read. That is the
-// whole reason bareWord exists: `pkgx +deps` runs inside every factory build,
+// whole reason bareWord exists: `zpkgx +deps` runs inside every factory build,
 // in a loop, and parsing a 467 KB catalogue to discover that `gnu.org/bash`
 // contains a slash would be paid on every call for nothing.
 func TestAProjectNameNeverReadsTheCatalogue(t *testing.T) {
@@ -140,17 +140,17 @@ func TestAnUnknownCommandPointsAtSearch(t *testing.T) {
 	if !strings.Contains(err.Error(), "declares") {
 		t.Errorf("the error overclaims — it should say DECLARES, not provides: %v", err)
 	}
-	// `pkgs search`, not `pkgx search`: the verb moved with the split, and a
+	// `zpkgs search`, not `zpkgx search`: the verb moved with the split, and a
 	// pointer at a command that no longer exists is worse than none —
 	// whoever follows it gets "no such package: search".
-	if !strings.Contains(err.Error(), "pkgs search nosuchtool") {
+	if !strings.Contains(err.Error(), "zpkgs search nosuchtool") {
 		t.Errorf("the error does not point at the search: %v", err)
 	}
 }
 
 // ⛔ No catalogue is its OWN message, not the pantry's. This is the defect in
-// the field report: `pkgx hugo version` answered "no recipe for hugo in
-// …pantry…", which reads as "go-pkgx does not know hugo" when the truth is
+// the field report: `zpkgx hugo version` answered "no recipe for hugo in
+// …pantry…", which reads as "go-zpkg does not know hugo" when the truth is
 // "this store has no catalogue yet".
 func TestNoCatalogueSaysToUpdateItRatherThanBlamingThePantry(t *testing.T) {
 	withCatalog(t, bottle.Catalog{}, errors.New("open …/catalog: no such file or directory"))
@@ -159,7 +159,7 @@ func TestNoCatalogueSaysToUpdateItRatherThanBlamingThePantry(t *testing.T) {
 	if err == nil {
 		t.Fatal("a bare word with no catalogue resolved")
 	}
-	if !strings.Contains(err.Error(), "pkgs catalog update") {
+	if !strings.Contains(err.Error(), "zpkgs catalog update") {
 		t.Errorf("the error does not say how to fix it: %v", err)
 	}
 	if strings.Contains(err.Error(), "no recipe for") {
@@ -173,7 +173,7 @@ func TestNoCatalogueSaysToUpdateItRatherThanBlamingThePantry(t *testing.T) {
 func TestAnEmptyCatalogueIsTreatedAsNone(t *testing.T) {
 	withCatalog(t, bottle.Catalog{Generated: "2026-10-12T09:00:00Z"}, nil)
 	m := &commandMapper{dir: t.TempDir()}
-	if _, _, err := m.resolve("hugo"); err == nil || !strings.Contains(err.Error(), "pkgs catalog update") {
+	if _, _, err := m.resolve("hugo"); err == nil || !strings.Contains(err.Error(), "zpkgs catalog update") {
 		t.Errorf("empty catalogue: err = %v", err)
 	}
 }

@@ -6,10 +6,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
-// `pkgx --lock <file>` — run exactly what a lock pins.
+// `zpkgx --lock <file>` — run exactly what a lock pins.
 //
 // # THE OTHER END OF `bk lock`
 //
@@ -51,7 +51,7 @@ func lockedSpecs(d bottle.Lock) []string {
 			continue
 		}
 		// `=` is the exact-version form the resolver already understands,
-		// the one a person writes as `pkgx node@=22.1.0`.
+		// the one a person writes as `zpkgx node@=22.1.0`.
 		out = append(out, p.Project+"@="+p.Version)
 	}
 	sort.Strings(out)
@@ -93,7 +93,7 @@ func loadLock(path string, stderr io.Writer) (bottle.Lock, error) {
 	// Said, because a lock's whole claim is that nothing moved, and a
 	// reader should be able to see WHICH file made that claim and how old
 	// it is without opening it.
-	fmt.Fprintf(stderr, "pkgx: %s, %d pin(s), %s\n",
+	fmt.Fprintf(stderr, "zpkgx: %s, %d pin(s), %s\n",
 		path, len(d.Pins), bottle.LockAge(d.Generated, timeNow()))
 	return d, nil
 }

@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // nix and guix show the state of the store in everything they print. Here
 // nothing did: a catalogue says what EXISTS, and a reader standing in front
-// of it mostly wants to know what they already HAVE. `pkgx ls curl.se`
-// before and after `pkgx curl.se --version` printed the same page.
+// of it mostly wants to know what they already HAVE. `zpkgx ls curl.se`
+// before and after `zpkgx curl.se --version` printed the same page.
 //
 // This is the plan's recipe for the phase, run as a test: the two listings
 // differ by a ✓.

@@ -4,31 +4,31 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-pkgx/bottle"
+	"github.com/go-zpkg/bottle"
 )
 
 // Resolving the COMMAND a person knows to the project that provides it.
 //
 // # The report
 //
-// From a colleague on 2026-10-12, replacing pkgx 2.10.3 with go-pkgx on a
+// From a colleague on 2026-10-12, replacing zpkgx 2.10.3 with go-zpkg on a
 // macOS arm64 workstation for a Slurm-on-OpenStack deployment. Seven tools
 // tried — go, terraform, tofu, hugo, gh, task, openstack — and the short
 // program name failed for every one of them:
 //
-//	$ pkgx hugo version
-//	pkgx: no recipe for hugo in …pantry-overlay… or …pkgxdev/pantry…
+//	$ zpkgx hugo version
+//	zpkgx: no recipe for hugo in …pantry-overlay… or …pkgxdev/pantry…
 //
 // while in the same store, the same minute:
 //
-//	$ pkgx search hugo
+//	$ zpkgx search hugo
 //	gohugo.io                                hugo  no bottle here
 //
 // So the mapping was already in the catalogue and only the SEARCH path
 // consulted it. Their conclusion, and it is the right one: without this,
-// every Taskfile, every doc and every habit (`pkgx <tool>`) has to be
+// every Taskfile, every doc and every habit (`zpkgx <tool>`) has to be
 // rewritten with project names, which is the first obstacle to replacing
-// pkgx at all. The README's own example is `pkgx node@22 --version`.
+// zpkgx at all. The README's own example is `zpkgx node@22 --version`.
 //
 // # Why a bare word is never a project
 //
@@ -40,7 +40,7 @@ import (
 // again when the data moves.
 //
 // That matters for more than tidiness: it is what lets the catalogue stay
-// unread for an ordinary project name. `pkgx +deps` runs inside every build
+// unread for an ordinary project name. `zpkgx +deps` runs inside every build
 // the factory does, in a loop, and making it parse a 467 KB catalogue to
 // discover that `gnu.org/bash` contains a slash would be a cost paid on every
 // call for nothing.
@@ -91,9 +91,9 @@ func (m *commandMapper) resolve(s string) (string, string, error) {
 		// ⛔ NOT the pantry's "no recipe for hugo" message. A bare word is
 		// never a project, so going on to look for a project called `hugo`
 		// can only produce an error about the wrong thing — which is exactly
-		// what the report ran into, and why it reads as "go-pkgx does not
+		// what the report ran into, and why it reads as "go-zpkg does not
 		// know hugo" rather than "this store has no catalogue yet".
-		return "", "", fmt.Errorf("%q is a command, not a project, and there is no catalogue to look it up in — run: pkgs catalog update", cmd)
+		return "", "", fmt.Errorf("%q is a command, not a project, and there is no catalogue to look it up in — run: zpkgs catalog update", cmd)
 	}
 	switch hits := m.cat.ProvidersOf(cmd); len(hits) {
 	case 1:
@@ -103,7 +103,7 @@ func (m *commandMapper) resolve(s string) (string, string, error) {
 		// measurement), so a miss is not proof that nothing provides the
 		// command — hence "declares" rather than "provides", and a pointer
 		// at the search that looks in names too.
-		return "", "", fmt.Errorf("no project in %s declares the command %q — try: pkgs search %s", m.src, cmd, cmd)
+		return "", "", fmt.Errorf("no project in %s declares the command %q — try: zpkgs search %s", m.src, cmd, cmd)
 	default:
 		// ⛔ NEVER pick one. `provides` says what a project puts on PATH,
 		// not who owns the name, so there is no basis here for choosing —
