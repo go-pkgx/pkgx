@@ -61,7 +61,12 @@ func runBuilds(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, pfx()+"usage: "+tool+" builds <project>@<version> [--platform os/arch]")
+		// ⛔ THE FLAGS COME FIRST, AND THE USAGE HAS TO SAY SO. Go's flag
+		// package stops parsing at the first non-flag argument, so
+		// `builds fftw.org@3.3.11 --platform linux/x86-64` treats the flag
+		// as a second operand and exits 2 — with a usage line that, spelt
+		// the other way round, showed exactly what had just failed.
+		fmt.Fprintln(stderr, pfx()+"usage: "+tool+" builds [--platform os/arch] [--sort key] <project>@<version>")
 		return 2
 	}
 	project, version, ok := strings.Cut(fs.Arg(0), "@")
@@ -74,6 +79,28 @@ func runBuilds(args []string, stdout, stderr io.Writer) int {
 			fs.Arg(0), project)
 		return 2
 	}
+	// ⛔⛔ A TRUST SET THAT CANNOT BE LOADED IS A CONFIGURATION ERROR, AND IT
+	// MUST NOT ARRIVE AS A COLUMN OF "?". Found by running the real binary
+	// against the real registry with a deliberately unmeetable threshold:
+	//
+	//   ZPKG_TRUST_THRESHOLD=2 with one trusted key
+	//   →  HASH  INSTALLED  PUBLISHED  SIGNED BY
+	//      (none)  -        yes        ?
+	//
+	// "?" is this table's word for "the registry was never asked", so the
+	// reader is told their network failed when in fact their configuration
+	// can never be satisfied. The error was perfectly good — LoadTrustSet
+	// says "cannot be met: the trust set has 1 key(s)" — and it was thrown
+	// away by describeBuilds, which drops every error so a listing survives
+	// an unreachable registry.
+	//
+	// So ask HERE, before drawing anything. A command validates its own
+	// configuration before it draws a table whose columns depend on it.
+	if _, err := bottle.LoadTrustSet(); err != nil {
+		fmt.Fprintln(stderr, pfx()+"builds: "+err.Error())
+		return 2
+	}
+
 	osn, arch := bottle.HostSlug()
 	if *platform != "" {
 		o, a, cut := strings.Cut(*platform, "/")
@@ -129,7 +156,7 @@ func printBuilds(w io.Writer, project string, builds []bottle.Build, registryUnk
 		published = "PUBLISHED?"
 	}
 	what := describeEach(project, builds)
-	fmt.Fprintf(tw, "HASH\tINSTALLED\t%s\tSIGNED BY\tWHAT\n", published)
+	fmt.Fprintf(tw, "HASH\tINSTALLED\t%s\tSIGNED BY\tBUILT BY\tWHAT\n", published)
 	for i, b := range builds {
 		// ⛔⛔ A BOTTLE WITH NO HASH IS NOT A BLANK CELL. Today's registry is
 		// full of them: every tag published before builds had identities is
@@ -160,7 +187,7 @@ func printBuilds(w io.Writer, project string, builds []bottle.Build, registryUnk
 		case b.Published:
 			pub = "yes"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", hash, installed, pub, signedBy(b), what[i])
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", hash, installed, pub, signedBy(b), builtBy(b), what[i])
 	}
 	tw.Flush()
 	// ⛔ A ROW THAT WOULD BE REFUSED AT INSTALL TIME SAYS SO UNDER THE TABLE.
@@ -217,6 +244,51 @@ func signedBy(b bottle.Build) string {
 		return b.Signatures.String()
 	}
 	return "⚠ " + b.Signatures.String()
+}
+
+// builtBy is the BUILT BY cell: which factory made this build, read from its
+// in-toto provenance.
+//
+// ⛔⛔ IT IS A COLUMN AND NOT PART OF WHAT, BECAUSE WHAT SAYS WHAT DIFFERS.
+// The builder is usually the same on every row, and a constant in a column
+// whose documented contract is "the axes on which these builds differ FROM
+// EACH OTHER" would break that contract for every reader who relies on it.
+//
+// ⛔ AND IT IS NOT IN THE HASH, WHICH IS WHY THE COLUMN EXISTS AT ALL. A zbk
+// release must not re-address every bottle in the registry — Nix and Spack
+// take the same position — so two factories building identical inputs produce
+// the SAME identity, and this is the only thing that tells them apart.
+//
+// Three states, kept apart on purpose:
+//
+//	?               the registry was never asked (the PUBLISHED column's own
+//	                convention, same reason)
+//	not recorded    it was asked, and the bottle carries no provenance —
+//	                which is most of the registry today
+//	bk (no version) a builder id that names a tool and not a release
+//	zbk@v0.64.0     what built it
+//
+// ⛔⛔ "bk" ALONE WOULD READ AS A COMPLETE ANSWER, AND IT IS NOT ONE. Asked of
+// the live registry on 2026-11-05, lz4.org 1.10.0 answers
+// `https://github.com/go-pkgx/bk@v0.26.0` on linux/x86-64 and
+// `https://github.com/go-pkgx/bk` — no version at all — on darwin/aarch64.
+// That is the defect zbk's own builderWithVersion comment records ("A BUILDER
+// THAT NEVER CHANGES CANNOT TELL TWO BUILDS APART"), still sitting in the
+// registry on every bottle published before it was fixed. Printing a bare
+// `bk` would hand the reader a tool name shaped exactly like an answer, so
+// the cell says which kind of answer it is.
+func builtBy(b bottle.Build) string {
+	if b.Signatures == nil {
+		return "?"
+	}
+	if b.Builder == "" {
+		return "not recorded"
+	}
+	s := bottle.ShortBuilder(b.Builder)
+	if !strings.Contains(s, "@") {
+		return s + " (no version)"
+	}
+	return s
 }
 
 // sortFlagHelp names the keys bottle offers, so the usage cannot drift from

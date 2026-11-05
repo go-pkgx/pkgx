@@ -1341,6 +1341,24 @@ a name on the artefact is written by whoever pushed it. A row marked `⚠` does
 not meet your threshold and will be refused at install time; a `?` means the
 registry could not be asked, which is not the same as "nobody signed it".
 
+Beside it, **BUILT BY** — read from the bottle's in-toto provenance, which is
+the only place the builder is recorded, because the builder is deliberately
+*not* part of a build's identity (a `zbk` release must not re-address every
+bottle in the registry; Nix and Spack take the same position). So *what made
+this* and *who vouches for it* are two questions, and the table answers both:
+
+```
+$ pkgs builds --platform linux/x86-64 lz4.org@1.10.0
+HASH    INSTALLED  PUBLISHED  SIGNED BY  BUILT BY    WHAT
+(none)  -          yes        go-zpkg    bk@v0.26.0  nothing recorded
+```
+
+`not recorded` means the bottle carries no provenance, `?` that the registry
+was never asked, and `bk (no version)` a builder id that names a tool and not
+a release — all three are different facts and none of them is the others.
+
+Flags come **before** the project, as Go's flag parsing requires.
+
 A signature by a key outside your trust set is counted and ignored rather than
 treated as an error: anybody may sign a public artefact, and if a stranger's
 signature invalidated a bottle, invalidating any bottle would cost one push.
