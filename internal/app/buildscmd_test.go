@@ -85,6 +85,49 @@ func TestBuildsListsEveryBuildOfAVersion(t *testing.T) {
 	}
 }
 
+// ⛔⛔ "date" IS THE KEY A READER REACHES FOR FIRST, AND IT IS ANSWERED
+// RATHER THAN MERELY REFUSED. Its absence is a property of the design — the
+// published timestamp is pinned so a re-publish is byte-identical — not an
+// oversight, and a bare "not a sort key" would leave the reader assuming the
+// feature is missing.
+func TestSortingByDateIsRefusedWithTheReason(t *testing.T) {
+	buildsStore(t)
+	var out, errb bytes.Buffer
+	if code := runBuilds([]string{"--sort", "date", "fftw.org@3.3.11"}, &out, &errb); code != 2 {
+		t.Errorf("exit = %d, want 2", code)
+	}
+	for _, want := range []string{"not a sort key", "pinned", "--sort=installed"} {
+		if !strings.Contains(errb.String(), want) {
+			t.Errorf("stderr lacks %q: %q", want, errb.String())
+		}
+	}
+	// A key that is simply wrong gets the list of keys and no lecture.
+	var out2, errb2 bytes.Buffer
+	if code := runBuilds([]string{"--sort", "nope", "fftw.org@3.3.11"}, &out2, &errb2); code != 2 {
+		t.Errorf("exit = %d, want 2", code)
+	}
+	if strings.Contains(errb2.String(), "pinned") {
+		t.Errorf("an unrelated bad key got the date explanation: %q", errb2.String())
+	}
+	if !strings.Contains(errb2.String(), "closure") {
+		t.Errorf("the refusal does not name the keys: %q", errb2.String())
+	}
+}
+
+// The flag's help is built from bottle's own list, so it cannot drift from
+// the keys the library actually accepts.
+func TestTheSortHelpNamesEveryKeyTheLibraryAccepts(t *testing.T) {
+	help := sortFlagHelp()
+	for _, o := range bottle.BuildOrders {
+		if !strings.Contains(help, string(o)) {
+			t.Errorf("help %q does not name %q", help, o)
+		}
+		if _, err := bottle.ParseBuildOrder(string(o)); err != nil {
+			t.Errorf("help names %q but the library refuses it: %v", o, err)
+		}
+	}
+}
+
 // goSpec is two builds of one version that differ ONLY in the Go toolchain
 // they were compiled with — the CVE rebuild case.
 func goSpec(goVer, goHash string) bottle.Concrete {
