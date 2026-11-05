@@ -129,6 +129,16 @@ env:
                listed line is ranked LAST, never removed, so "=3.6.4" and a
                lock still resolve to it and say so on stderr. Named and
                unreadable is an empty list and a warning, not a fall back
+  ZPKG_WITHDRAWN
+               a JSON file of BUILDS a CVE has caught, per project, e.g.
+               {"fftw.org": [{"version": "3.3.11", "hash": "27o3ys…",
+               "because": "CVE-2026-1234", "superseded_by": "rnp44i…"}]}.
+               A build, not a version: when the flaw is in the TOOLCHAIN a
+               package was compiled with, the fix is another build of the
+               same version. Ranked LAST among its siblings, never removed,
+               for the same reason as ZPKG_DEPRECATED — a lock that stops
+               resolving is worse than the defect it avoids. An entry with
+               no hash withdraws every build of the version
 
   ~/.pkgx/config.hcl2 sets defaults for the ZPKG_* / OCI_* variables above
   (HCL2 attributes, e.g. ZPKG_DIST = "oci://ghcr.io/go-pkgx/packages"). A real

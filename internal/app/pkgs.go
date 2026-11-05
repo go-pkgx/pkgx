@@ -145,6 +145,10 @@ env:
                a JSON file of end-of-life release lines per project, which
                REPLACES the list built into this binary; {} turns it off.
                "zpkgs compat" resolves, so it reads the same list zpkgx does
+  ZPKG_WITHDRAWN
+               a JSON file of BUILDS a CVE has caught, per project. Shown in
+               the WHAT column of "zpkgs builds", with the hash that replaces
+               each one. Ranked last among its siblings, never removed
 
   The variables keep the ZPKG_ spelling: they name a store and a registry
   that both binaries share, not a program.

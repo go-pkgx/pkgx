@@ -83,21 +83,37 @@ func runBuilds(args []string, stdout, stderr io.Writer) int {
 		// would state as a fact the thing we just said we do not know.
 		return boolExit(err != nil)
 	}
-	printBuilds(stdout, builds, err != nil)
+	printBuilds(stdout, project, builds, err != nil)
+	// ⛔ THE WITHDRAWALS ARE RESTATED UNDER THE TABLE, saying that they still
+	// RESOLVE. A reader who sees "withdrawn" in a cell and nothing else will
+	// assume the build is gone; it is not, it is ranked last — and a lock
+	// that pins it still works, which is the whole reason the mechanism
+	// ranks rather than filters.
+	if note := bottle.WithdrawnNote(project, builds); note != "" {
+		fmt.Fprintf(stdout, "\n%s\n", note)
+	}
 	fmt.Fprintf(stdout, "\ninstalled under %s; name one with: %s@%s/<hash>\n", bottle.Dir(), project, version)
 	return boolExit(err != nil)
 }
 
 // printBuilds renders the table. The hash is first because it is the thing a
 // caller copies into `@version/<hash>`.
-func printBuilds(w io.Writer, builds []bottle.Build, registryUnknown bool) {
+//
+// ⛔⛔ EVERY ROW CARRIES A DESCRIPTION, OR THE TABLE IS A LIST OF HASHES AND
+// THE READER IS NO BETTER OFF. A hash is opaque by construction; shown two of
+// them with nothing beside them, a caller has no way to choose and this
+// command has handed back the problem it was asked to solve. The WHAT column
+// is bottle.Distinguish: the axes on which these builds differ FROM EACH
+// OTHER, which is the only short answer that is also a useful one.
+func printBuilds(w io.Writer, project string, builds []bottle.Build, registryUnknown bool) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	published := "PUBLISHED"
 	if registryUnknown {
 		published = "PUBLISHED?"
 	}
-	fmt.Fprintf(tw, "HASH\tINSTALLED\t%s\n", published)
-	for _, b := range builds {
+	what := describeEach(project, builds)
+	fmt.Fprintf(tw, "HASH\tINSTALLED\t%s\tWHAT\n", published)
+	for i, b := range builds {
 		// ⛔⛔ A BOTTLE WITH NO HASH IS NOT A BLANK CELL. Today's registry is
 		// full of them: every tag published before builds had identities is
 		// a plain `3.3.11`, and so is every bottle we only mirrored. Printing
@@ -127,7 +143,7 @@ func printBuilds(w io.Writer, builds []bottle.Build, registryUnknown bool) {
 		case b.Published:
 			pub = "yes"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", hash, installed, pub)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", hash, installed, pub, what[i])
 	}
 	tw.Flush()
 	// Said once, under the table, and only when there is such a row: a
@@ -139,6 +155,55 @@ func printBuilds(w io.Writer, builds []bottle.Build, registryUnknown bool) {
 			break
 		}
 	}
+}
+
+// bottleWithdrawalOf is a seam: the withdrawal list is read once per process
+// from a file, so a test that went through it would measure whichever test
+// ran first.
+var bottleWithdrawalOf = bottle.WithdrawalOf
+
+// describeEach is the WHAT column: what each build is, in the terms that tell
+// it apart from the others listed beside it.
+//
+// ⛔ THE WITHDRAWAL COMES FIRST IN THE CELL. A reader scanning the column to
+// choose must not have to finish reading a dependency list before learning
+// that this build is the one a CVE caught — and the replacement is in the
+// same cell, because a warning that does not say where to go next leaves them
+// comparing hashes, which is what the column exists to spare them.
+//
+// ⛔ AND A BUILD NOTHING RECORDS SAYS SO. Every bottle published before
+// identities existed is one of these; an empty cell reads as a rendering
+// fault rather than as the truth, which is that nothing was ever written
+// down about how it was made.
+func describeEach(project string, builds []bottle.Build) []string {
+	specs := make([]bottle.Concrete, len(builds))
+	for i, b := range builds {
+		specs[i] = b.Spec
+	}
+	var diff []string
+	if len(builds) == 1 {
+		// Nothing to be told apart from, so the whole of what was recorded
+		// is the useful answer — summarised.
+		diff = []string{bottle.Describe(specs[0])}
+	} else {
+		diff = bottle.Distinguish(specs)
+	}
+
+	out := make([]string, len(builds))
+	for i, b := range builds {
+		var parts []string
+		if w, yes := bottleWithdrawalOf(project, b.Version.Raw, b.Hash()); yes {
+			parts = append(parts, "⚠ "+w.String())
+		}
+		switch {
+		case diff[i] != "":
+			parts = append(parts, diff[i])
+		case len(parts) == 0:
+			parts = append(parts, "nothing recorded")
+		}
+		out[i] = strings.Join(parts, " · ")
+	}
+	return out
 }
 
 // boolExit is 1 for "something went wrong", 0 otherwise.

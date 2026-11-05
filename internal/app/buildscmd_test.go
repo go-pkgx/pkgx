@@ -85,6 +85,132 @@ func TestBuildsListsEveryBuildOfAVersion(t *testing.T) {
 	}
 }
 
+// goSpec is two builds of one version that differ ONLY in the Go toolchain
+// they were compiled with — the CVE rebuild case.
+func goSpec(goVer, goHash string) bottle.Concrete {
+	return bottle.Concrete{
+		Platform: "linux/x86-64",
+		Recipe:   "sha256:0123456789abcdef",
+		Deps: []bottle.Dep{
+			{Project: "go.dev", Version: goVer, Hash: goHash},
+			{Project: "zlib.net", Version: "1.3.2", Hash: "cccccccccccccccc"},
+		},
+	}
+}
+
+// ⛔⛔ THE CASE THE WHOLE DESIGN IS FOR, RENDERED. A Go patch release fixes a
+// standard-library defect: the recipe does not change, the upstream version
+// does not change, only `go.dev` in the closure — so the fix is another build
+// of the SAME version, and the table has to make the two tellable apart at a
+// glance. A reader who cannot do that is back to comparing hashes.
+func TestTheTableTellsTwoToolchainRebuildsApart(t *testing.T) {
+	const bad, good = "27o3ysxva6swayci", "rnp44isdgdtzxcit"
+	builds := []bottle.Build{
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: bad}, Installed: "/s", Published: true,
+			Spec: goSpec("1.27.3", "aaaaaaaaaaaaaaaa")},
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: good}, Published: true,
+			Spec: goSpec("1.27.4", "bbbbbbbbbbbbbbbb")},
+	}
+
+	var out bytes.Buffer
+	printBuilds(&out, "fftw.org", builds, false)
+	got := out.String()
+	t.Logf("\n%s", got)
+
+	if !strings.Contains(got, "go.dev 1.27.3") || !strings.Contains(got, "go.dev 1.27.4") {
+		t.Errorf("the toolchain that distinguishes them is not shown:\n%s", got)
+	}
+	// ⛔ AND THE DEPENDENCY THEY SHARE IS NOT. Without this the column grows
+	// into the whole closure and stops being readable, which is the failure
+	// mode it was written to avoid.
+	if strings.Contains(got, "zlib.net") {
+		t.Errorf("a dependency both builds share was printed:\n%s", got)
+	}
+}
+
+// And with one of them withdrawn, the row says so FIRST and the note under
+// the table says the build still resolves.
+func TestAWithdrawnBuildIsMarkedInTheRowAndExplainedBelow(t *testing.T) {
+	const bad, good = "27o3ysxva6swayci", "rnp44isdgdtzxcit"
+	oldFor := bottleWithdrawalOf
+	bottleWithdrawalOf = func(project, version, hash string) (bottle.Withdrawal, bool) {
+		if hash == bad {
+			return bottle.Withdrawal{Version: version, Hash: bad, Because: "CVE-2026-1234", SupersededBy: good}, true
+		}
+		return bottle.Withdrawal{}, false
+	}
+	t.Cleanup(func() { bottleWithdrawalOf = oldFor })
+
+	builds := []bottle.Build{
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: bad}, Published: true, Spec: goSpec("1.27.3", "aaaaaaaaaaaaaaaa")},
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: good}, Published: true, Spec: goSpec("1.27.4", "bbbbbbbbbbbbbbbb")},
+	}
+	var out bytes.Buffer
+	printBuilds(&out, "fftw.org", builds, false)
+	got := out.String()
+	t.Logf("\n%s", got)
+
+	line := rowFor(t, got, bad)
+	if !strings.Contains(line, "CVE-2026-1234") {
+		t.Errorf("the withdrawn row does not name the advisory: %q", line)
+	}
+	// ⛔ THE WARNING COMES BEFORE THE DESCRIPTION. A reader scanning to choose
+	// must not have to read a dependency list first to learn this is the one
+	// a CVE caught.
+	if i, j := strings.Index(line, "CVE-2026-1234"), strings.Index(line, "go.dev"); i < 0 || j < 0 || i > j {
+		t.Errorf("the warning is not first in the cell: %q", line)
+	}
+	if !strings.Contains(line, "rnp44i") {
+		t.Errorf("the row does not say what replaces it: %q", line)
+	}
+	if rowFor(t, got, good) == "" || strings.Contains(rowFor(t, got, good), "CVE") {
+		t.Errorf("the clean sibling was marked:\n%s", got)
+	}
+}
+
+// rowFor returns the table line holding a hash.
+func rowFor(t *testing.T, out, hash string) string {
+	t.Helper()
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, hash) {
+			return l
+		}
+	}
+	return ""
+}
+
+// A single build has nothing to be told apart from, so the row carries a
+// summary of what was recorded rather than an empty cell.
+func TestASingleBuildIsSummarisedRatherThanLeftBlank(t *testing.T) {
+	var out bytes.Buffer
+	printBuilds(&out, "fftw.org", []bottle.Build{{
+		Version:   bottle.Ver{Raw: "3.3.11", Variant: "27o3ysxva6swayci"},
+		Published: true, Spec: goSpec("1.27.3", "aaaaaaaaaaaaaaaa"),
+	}}, false)
+	got := out.String()
+	for _, want := range []string{"linux/x86-64", "2 dependencies"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("want %q in:\n%s", want, got)
+		}
+	}
+}
+
+// ⛔ A BUILD NOTHING RECORDS SAYS SO. An empty cell reads as a rendering
+// fault; "nothing recorded" is the truth, and it is the state of every bottle
+// in the registry today.
+func TestABuildWithNoSpecSaysNothingWasRecorded(t *testing.T) {
+	var out bytes.Buffer
+	printBuilds(&out, "fftw.org", []bottle.Build{
+		{Version: bottle.Ver{Raw: "3.3.11"}, Published: true},
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: "27o3ysxva6swayci"}, Published: true,
+			Spec: goSpec("1.27.3", "aaaaaaaaaaaaaaaa")},
+	}, false)
+	got := out.String()
+	if !strings.Contains(got, "nothing recorded") {
+		t.Errorf("a build with no spec got a blank cell:\n%s", got)
+	}
+}
+
 // ⛔⛔ A PUBLISHED BOTTLE WITH NO HASH IS WHAT THE REGISTRY IS FULL OF TODAY,
 // and it must print as a fact about the bottle rather than as a blank cell.
 // Found by accident: the first version of this file set ZPKG_DIST, which the
@@ -93,7 +219,7 @@ func TestBuildsListsEveryBuildOfAVersion(t *testing.T) {
 // whose HASH column was empty and which no reader could name or explain.
 func TestABottleWithNoIdentityIsNamedRatherThanBlank(t *testing.T) {
 	var out bytes.Buffer
-	printBuilds(&out, []bottle.Build{
+	printBuilds(&out, "fftw.org", []bottle.Build{
 		{Version: bottle.Ver{Raw: "3.3.11"}, Published: true},
 	}, false)
 	if !strings.Contains(out.String(), "(none)") {
@@ -104,7 +230,7 @@ func TestABottleWithNoIdentityIsNamedRatherThanBlank(t *testing.T) {
 	}
 	// And the note appears only when there IS such a row.
 	var out2 bytes.Buffer
-	printBuilds(&out2, []bottle.Build{
+	printBuilds(&out2, "fftw.org", []bottle.Build{
 		{Version: bottle.Ver{Raw: "3.3.11", Variant: "abcdefghijklmnop"}, Published: true},
 	}, false)
 	if strings.Contains(out2.String(), "(none)") {
