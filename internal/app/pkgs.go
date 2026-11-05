@@ -99,6 +99,11 @@ usage:
                                      catalogue for, one per line, ready to hand
                                      back to --platform. Asks the registry: no
                                      local file knows what EXISTS
+  zpkgs builds <project>@<version>    which BUILDS of that version exist, here
+                                     and in the registry, with the hash to
+                                     name one: "<project>@<version>/<hash>".
+                                     Builds are siblings within a version, so
+                                     a version is required
   zpkgs store [--by-size] [-n N]      what the bottle store holds: every version
                                      an ephemeral run ever pulled, and its
                                      size. Reports and deletes NOTHING
@@ -164,6 +169,8 @@ func runVerb(argv []string) (int, bool) {
 		return runStore(argv[1:], os.Stdout, os.Stderr), true
 	case "why":
 		return runWhy(argv[1:], os.Stdout, os.Stderr), true
+	case "builds":
+		return runBuilds(argv[1:], os.Stdout, os.Stderr), true
 	case "search":
 		return runSearch(argv[1:], os.Stdout, os.Stderr), true
 	case "request":
