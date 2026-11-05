@@ -103,7 +103,13 @@ usage:
                                      and in the registry, with the hash to
                                      name one: "<project>@<version>/<hash>".
                                      Builds are siblings within a version, so
-                                     a version is required
+                                     a version is required.
+                                     --sort=status|closure|hash|installed —
+                                     closure puts a build made against a
+                                     later toolchain first, which is what a
+                                     CVE rebuild produces. There is no date
+                                     key: a published timestamp is pinned so
+                                     a re-publish is byte-identical
   zpkgs store [--by-size] [-n N]      what the bottle store holds: every version
                                      an ephemeral run ever pulled, and its
                                      size. Reports and deletes NOTHING

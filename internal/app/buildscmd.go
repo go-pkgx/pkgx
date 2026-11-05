@@ -41,7 +41,23 @@ func runBuilds(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("builds", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	platform := fs.String("platform", "", "ask about `os/arch` instead of this machine")
+	// ⛔ THE KEYS ARE bottle's, NOT A SECOND LIST. A flag that enumerated
+	// them here would disagree with the library the first time one was
+	// added, and the disagreement would be a usage string that lies.
+	sortBy := fs.String("sort", string(bottle.ByStatus), sortFlagHelp())
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	order, err := bottle.ParseBuildOrder(*sortBy)
+	if err != nil {
+		fmt.Fprintln(stderr, pfx()+"builds --sort: "+err.Error())
+		// ⛔ AND "date" IS ANSWERED, NOT JUST REFUSED. It is the key a reader
+		// reaches for first, and its absence is a property of the design
+		// rather than an oversight — so the refusal explains it instead of
+		// leaving them to assume the feature is missing.
+		if *sortBy == "date" {
+			fmt.Fprintln(stderr, pfx()+bottle.WhyNoDate)
+		}
 		return 2
 	}
 	if fs.NArg() != 1 {
@@ -69,6 +85,7 @@ func runBuilds(args []string, stdout, stderr io.Writer) int {
 	}
 
 	builds, err := bottle.BuildsOf(project, version, bottle.Dir(), osn, arch)
+	bottle.SortBuilds(project, builds, order)
 	// ⛔ THE ERROR DOES NOT SUPPRESS THE ANSWER. BuildsOf returns the
 	// installed half alongside a registry failure precisely so this can print
 	// what it knows and say what it could not learn.
@@ -155,6 +172,16 @@ func printBuilds(w io.Writer, project string, builds []bottle.Build, registryUnk
 			break
 		}
 	}
+}
+
+// sortFlagHelp names the keys bottle offers, so the usage cannot drift from
+// the library the first time one is added.
+func sortFlagHelp() string {
+	names := make([]string, 0, len(bottle.BuildOrders))
+	for _, o := range bottle.BuildOrders {
+		names = append(names, string(o))
+	}
+	return "order the list by `key`: " + strings.Join(names, ", ")
 }
 
 // bottleWithdrawalOf is a seam: the withdrawal list is read once per process
