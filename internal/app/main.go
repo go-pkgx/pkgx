@@ -122,6 +122,21 @@ env:
                pantry — pair with ZPKG_VERIFY=0)
   ZPKG_VERIFY  verify bottle signatures, fail-closed (default: on; set
                0/false/no/off to disable)
+  ZPKG_TRUSTED_KEYS
+               who may vouch for a bottle: "name:KEY" entries, whitespace
+               separated, REPLACING the built-in go-zpkg key
+  ZPKG_EXTRA_TRUSTED_KEYS
+               the same, ADDED to it — usually what you want, since
+               replacing the list by hand is how the entry that made
+               everything work gets dropped
+  ZPKG_TRUST_THRESHOLD
+               how many DISTINCT trusted keys must have signed a bottle
+               (default: 1). Two builders who build the same inputs get the
+               same bottle — that is the point — so what tells them apart is
+               who signed it. Set 2 to install nothing that a second builder
+               did not independently reproduce. Each key counts once, and a
+               signature by a key outside the set is ignored, not an error.
+               A threshold the trust set cannot meet is refused at startup
   ZPKG_DEPRECATED
                a JSON file of end-of-life release lines per project, e.g.
                {"openssl.org": ["3.6"]}, which REPLACES the list built into

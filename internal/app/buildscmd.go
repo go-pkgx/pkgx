@@ -129,7 +129,7 @@ func printBuilds(w io.Writer, project string, builds []bottle.Build, registryUnk
 		published = "PUBLISHED?"
 	}
 	what := describeEach(project, builds)
-	fmt.Fprintf(tw, "HASH\tINSTALLED\t%s\tWHAT\n", published)
+	fmt.Fprintf(tw, "HASH\tINSTALLED\t%s\tSIGNED BY\tWHAT\n", published)
 	for i, b := range builds {
 		// ⛔⛔ A BOTTLE WITH NO HASH IS NOT A BLANK CELL. Today's registry is
 		// full of them: every tag published before builds had identities is
@@ -160,9 +160,31 @@ func printBuilds(w io.Writer, project string, builds []bottle.Build, registryUnk
 		case b.Published:
 			pub = "yes"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", hash, installed, pub, what[i])
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", hash, installed, pub, signedBy(b), what[i])
 	}
 	tw.Flush()
+	// ⛔ A ROW THAT WOULD BE REFUSED AT INSTALL TIME SAYS SO UNDER THE TABLE.
+	// The cell alone reads as a description; the reader's actual question is
+	// "can I install this?", and the answer is yes or no, not a list of
+	// names. Said once, and only when there is such a row.
+	//
+	// ⛔ NO NUMBER IN IT. The first draft printed the threshold of the first
+	// failing row under a sentence about EVERY marked row — true today only
+	// because one trust set describes them all, and silently wrong the moment
+	// that stops holding. The variable is named; its value is the reader's
+	// own and they can print it.
+	//
+	// ⛔ AND IT DOES NOT CLAIM ZPKG_VERIFY=0 WARNS. It does not: the check
+	// returns early and says nothing (bottle's verifyPulledDigest). Writing
+	// "installs anyway, and says so" would have been a promise this stack
+	// does not keep.
+	for _, b := range builds {
+		if b.Signatures != nil && !b.Signatures.OK() {
+			fmt.Fprintf(w, "\n⚠ a row marked ⚠ does not meet your %s and will be REFUSED at install time\n  (%s=0 skips the check entirely, silently).\n",
+				bottle.TrustThresholdEnv, "ZPKG_VERIFY")
+			break
+		}
+	}
 	// Said once, under the table, and only when there is such a row: a
 	// reader meeting "(none)" needs to know it is a fact about the bottle
 	// and not about this command.
@@ -172,6 +194,29 @@ func printBuilds(w io.Writer, project string, builds []bottle.Build, registryUnk
 			break
 		}
 	}
+}
+
+// signedBy is the SIGNED BY cell: who vouches for this build, as THIS
+// machine's trust set names them.
+//
+// ⛔⛔ "NOT ASKED" IS NOT "NOBODY", AND THE TWO MUST NOT RENDER ALIKE. A nil
+// report means the registry was never reached for this row — printing
+// "unsigned" there would turn a network failure into a claim about the
+// artefact, which is exactly how someone ends up trusting a bottle nobody
+// signed, or rebuilding one that was fine. "?" is the same convention the
+// PUBLISHED column already uses, for the same reason.
+//
+// ⛔ AND THE NAMES ARE OURS, NOT THE REGISTRY'S. A name on the artefact is
+// written by whoever pushed it; what appears here comes from the local trust
+// set, which is the only place a name means anything.
+func signedBy(b bottle.Build) string {
+	if b.Signatures == nil {
+		return "?"
+	}
+	if b.Signatures.OK() {
+		return b.Signatures.String()
+	}
+	return "⚠ " + b.Signatures.String()
 }
 
 // sortFlagHelp names the keys bottle offers, so the usage cannot drift from

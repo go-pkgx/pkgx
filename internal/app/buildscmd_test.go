@@ -281,6 +281,76 @@ func TestABottleWithNoIdentityIsNamedRatherThanBlank(t *testing.T) {
 	}
 }
 
+// ⛔⛔ "NOT ASKED" AND "NOBODY SIGNED IT" MUST NOT LOOK ALIKE IN THE COLUMN.
+// A nil report is a registry we could not reach; rendering it as "unsigned"
+// turns a network failure into a claim about the artefact, and that is how a
+// reader ends up trusting a bottle nobody signed — or rebuilding one that was
+// perfectly good.
+func TestSignedByTellsNotAskedFromNobody(t *testing.T) {
+	ok := &bottle.SignatureReport{Signers: []string{"go-zpkg", "alice"}, Threshold: 2}
+	short := &bottle.SignatureReport{Signers: []string{"go-zpkg"}, Threshold: 2}
+	none := &bottle.SignatureReport{Threshold: 1}
+
+	var out bytes.Buffer
+	printBuilds(&out, "fftw.org", []bottle.Build{
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: "aaaaaaaaaaaaaaaa"}, Published: true, Signatures: ok},
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: "bbbbbbbbbbbbbbbb"}, Published: true, Signatures: short},
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: "cccccccccccccccc"}, Published: true, Signatures: none},
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: "dddddddddddddddd"}, Published: true},
+	}, false)
+	got := out.String()
+
+	if !strings.Contains(got, "SIGNED BY") {
+		t.Fatalf("no SIGNED BY column:\n%s", got)
+	}
+	for _, want := range []string{
+		"go-zpkg, alice", // met the threshold
+		"⚠ go-zpkg",      // short of it, and flagged
+		"⚠ unsigned",     // asked, and the answer is nobody
+		"REFUSED at install time",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q:\n%s", want, got)
+		}
+	}
+	// ⛔ THE FOOTER CARRIES NO THRESHOLD VALUE. It speaks about every marked
+	// row, and the rows here deliberately disagree (2 and 1), so a number
+	// taken from one of them would be a fact about one row dressed as a fact
+	// about all. Nor does it promise ZPKG_VERIFY=0 warns, because it does not.
+	if strings.Contains(got, "ZPKG_TRUST_THRESHOLD=") {
+		t.Errorf("the footer printed one row's threshold as if it were everyone's:\n%s", got)
+	}
+	if strings.Contains(got, "says so") {
+		t.Errorf("the footer claims ZPKG_VERIFY=0 warns; it does not:\n%s", got)
+	}
+	// The unasked row is "?", like the PUBLISHED column's — read as fields so
+	// the assertion does not depend on tabwriter's padding.
+	row := strings.Fields(lineWith(got, "dddddddddddddddd"))
+	if len(row) < 4 || row[3] != "?" {
+		t.Errorf("an unasked registry did not print as ?: %v", row)
+	}
+
+	// And the footer appears only when a row actually falls short.
+	var fine bytes.Buffer
+	printBuilds(&fine, "fftw.org", []bottle.Build{
+		{Version: bottle.Ver{Raw: "3.3.11", Variant: "aaaaaaaaaaaaaaaa"}, Published: true, Signatures: ok},
+	}, false)
+	if strings.Contains(fine.String(), "REFUSED at install time") {
+		t.Errorf("the warning was printed with nothing to warn about:\n%s", fine.String())
+	}
+}
+
+// lineWith returns the first line of s containing needle, for a readable
+// failure message.
+func lineWith(s, needle string) string {
+	for _, l := range strings.Split(s, "\n") {
+		if strings.Contains(l, needle) {
+			return l
+		}
+	}
+	return ""
+}
+
 // Only the asked-for version. A store holding two versions must not answer
 // about both: builds are the siblings of ONE version.
 func TestBuildsAnswersAboutTheVersionAsked(t *testing.T) {
