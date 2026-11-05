@@ -91,6 +91,8 @@ asking ABOUT packages is zpkgs, a separate command:
   zpkgs ls --dependents <pkg>         the other direction: who NEEDS this
   zpkgs why <project> <dependency>    the shortest path by which one needs the
                                      other
+  zpkgs builds <project>@<version>    which BUILDS of that version exist, here
+                                     and in the registry
   zpkgs search [-n N] <text>          find a package by name or by a command it
                                      provides
   zpkgs browse [node]                 walk the tree full-screen
@@ -992,7 +994,18 @@ const verDelims = "@^~<>="
 // keeps its operator ("^6", ">=6") because that is what bottle's version
 // matcher consumes; the "@" form carries no operator, so it is dropped. A spec
 // with no constraint matches any version ("*").
+// ⛔ A BUILD HASH IS CUT OFF FIRST, AND IT IS bottle's PARSER THAT CUTS IT.
+// `fftw.org@3.3.11/7k2mq4` names one BUILD of a version. Without this the
+// slash stays in the constraint, which then resolves to nothing and reports
+// "no version 3.3.11/7k2mq4" — a message that sends its reader to look for a
+// version that was never meant.
+//
+// The rule is bottle.ParseBuildRef's and is not restated here: a hash may
+// only follow an `@version`, because a third of the pantry has a slash in its
+// project name and a trailing component cannot be told from a hash by its
+// shape. See buildHashOf for what is done with it.
 func splitSpec(s string) (project, constraint string) {
+	s, _ = bottle.ParseBuildRef(s)
 	i := strings.IndexAny(s, verDelims)
 	if i <= 0 {
 		return s, "*"
@@ -1001,6 +1014,17 @@ func splitSpec(s string) (project, constraint string) {
 		return s[:i], s[i+1:]
 	}
 	return s[:i], s[i:]
+}
+
+// buildHashOf is the hash a spec names, or "".
+//
+// ⛔ SEPARATE FROM splitSpec BECAUSE SELECTING A BUILD IS NOT RESOLVING A
+// VERSION. The resolver answers "which version", and the hash then says which
+// of that version's builds — two questions, and folding the second into the
+// constraint is what produced the misleading refusal above.
+func buildHashOf(spec string) string {
+	_, h := bottle.ParseBuildRef(spec)
+	return h
 }
 
 func project(spec string) string {

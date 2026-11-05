@@ -548,6 +548,7 @@ var subcommandCompletions = []completion{
 	{"search", "find a package by name or by a command it provides"},
 	{"request", "a report you can open as an issue when a package is missing"},
 	{"why", "the shortest path by which one project needs another"},
+	{"builds", "which builds of one version exist, and the hash to name one"},
 	{"store", "what this disk holds, and how much of it"},
 	{"browse", "walk the tree full-screen"},
 	{"env", "environments: init, load, unload, purge, avail, show, import"},

@@ -81,6 +81,23 @@ func (m *commandMapper) load() {
 // A spec that is already a project name is answered without the catalogue
 // being read at all.
 func (m *commandMapper) resolve(s string) (string, string, error) {
+	// ⛔⛔ A BUILD HASH IS REFUSED HERE, AND THE REFUSAL SAYS SO RATHER THAN
+	// IGNORING IT. splitSpec cuts the hash off so the version still parses;
+	// if that were all, `fftw.org@3.3.11/7k2mq4` would run SOME build of
+	// 3.3.11 and look like it had honoured the request. Running a build the
+	// caller did not name, under a name that says they did, is worse than
+	// not supporting the syntax yet.
+	//
+	// Selecting the build needs the resolver and the installer to carry the
+	// hash down to the store, which is go-zpkg/zpkgx#142 and only becomes
+	// useful once the registry is rebuilt with hashed tags. Until then the
+	// listing half is real: `zpkgs builds` is what the message points at.
+	if h := buildHashOf(s); h != "" {
+		proj, cons := splitSpec(s)
+		return "", "", fmt.Errorf(
+			"naming a build by hash (%s@%s/%s) is not wired into the resolver yet — see which builds exist with: zpkgs builds %s@%s",
+			proj, cons, h, proj, cons)
+	}
 	proj, cons := splitSpec(s)
 	if !bareWord(s) {
 		return proj, cons, nil
