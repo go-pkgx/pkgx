@@ -16,6 +16,8 @@ github.com/go-zpkg/bottle v0.76.0 h1:41XrCJfxRzG2ByFU3MwRrnTVjqQq6Kr7hmbGA7t5P1I
 github.com/go-zpkg/bottle v0.76.0/go.mod h1:V+Yz90wZO//k+jIygs/srDHr5pyBLFfD5Xnl6ShtPbg=
 github.com/go-zpkg/bottle v0.77.0 h1:J83/Pis1SlptxmU6aMoTl8V37wjOUNm1fk60F4dRhEw=
 github.com/go-zpkg/bottle v0.77.0/go.mod h1:V+Yz90wZO//k+jIygs/srDHr5pyBLFfD5Xnl6ShtPbg=
+github.com/go-zpkg/bottle v0.79.0 h1:kE1OlsAPd+qUx3FyFarKDo/pfFDYcnuXO65pG6ocn2c=
+github.com/go-zpkg/bottle v0.79.0/go.mod h1:V+Yz90wZO//k+jIygs/srDHr5pyBLFfD5Xnl6ShtPbg=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/hashicorp/hcl/v2 v2.25.0 h1:HmmQVYRny4MaBo4b20TjmL46wyuUxpnMWkPZ4+NTbWk=
