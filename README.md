@@ -1304,6 +1304,13 @@ round-trips arbitrary modulefiles through the converter and a real HCL parser
   It changes when the bottles are copied, not before
 - `ZPKG_VERIFY` — verify bottle signatures, fail-closed (default on; set
   `0`/`false`/`no`/`off` to disable)
+- `ZPKG_TRUSTED_KEYS` — who may vouch for a bottle: `name:KEY` entries,
+  whitespace separated, **replacing** the built-in `go-zpkg` key
+- `ZPKG_EXTRA_TRUSTED_KEYS` — the same, **added** to it. Usually what you
+  want: replacing the list by hand is how the entry that made everything work
+  gets dropped
+- `ZPKG_TRUST_THRESHOLD` — how many **distinct** trusted keys must have signed
+  (default `1`). See [below](#two-builders-one-bottle)
 - `ZPKG_DEPRECATED` — a JSON file of end-of-life release lines per project,
   `{"openssl.org": ["3.6"]}`, which **replaces** the list built into the
   binary; `{}` turns the preference off. Named and unreadable is an empty list
@@ -1312,6 +1319,36 @@ round-trips arbitrary modulefiles through the converter and a real HCL parser
 
 By default `pkgx <pkg>` fetches from the signed registry and verifies each
 bottle's signature before running it — no env needed.
+
+### Two builders, one bottle
+
+Two people who build the same inputs get the **same** bottle, hash and all —
+deliberately, because an identity that varied with the builder could never be
+compared. So you do not tell them apart by the artefact; you tell them apart
+by **who signed it**. Each attaches their own signature to the one bottle,
+and the client counts how many distinct trusted keys it can verify.
+
+```sh
+# install nothing that a second builder did not independently reproduce
+export ZPKG_EXTRA_TRUSTED_KEYS='alice:RWQ…'
+export ZPKG_TRUST_THRESHOLD=2
+pkgx +fftw.org
+```
+
+`pkgx builds <project>@<version>` shows a **SIGNED BY** column, naming the
+signers *as your own trust set names them* — never as the registry does, since
+a name on the artefact is written by whoever pushed it. A row marked `⚠` does
+not meet your threshold and will be refused at install time; a `?` means the
+registry could not be asked, which is not the same as "nobody signed it".
+
+A signature by a key outside your trust set is counted and ignored rather than
+treated as an error: anybody may sign a public artefact, and if a stranger's
+signature invalidated a bottle, invalidating any bottle would cost one push.
+
+The other half lives in `zbk`: rebuild, compare with `zbk reproduce`, and
+`zbk sign` attaches your signature to the published bottle — refusing, by
+default, when your rebuild produced different bytes. That refusal is the
+finding.
 
 ### `~/.pkgx/config.hcl2`
 
