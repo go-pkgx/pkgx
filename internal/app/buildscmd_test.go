@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -382,9 +383,16 @@ func TestSignedByTellsNotAskedFromNobody(t *testing.T) {
 // told their network failed when their configuration is the thing that cannot
 // work. The error existed and was dropped by the listing, which swallows all
 // errors so it can survive an unreachable registry.
+// ⛔ THE THRESHOLD IS COMPUTED FROM THE TRUST SET, NOT HARDCODED. This test
+// said `2` against "the one built-in key", and the first real key rotation
+// (2026-11-06) put a retired key beside the current one — so 2 became
+// satisfiable, the command stopped refusing, and a test that was about
+// something else failed. One more than whatever the default set holds is
+// unmeetable by construction, at this rotation and the next.
 func TestAnUnmeetableThresholdIsAConfigurationError(t *testing.T) {
 	buildsStore(t)
-	t.Setenv("ZPKG_TRUST_THRESHOLD", "2") // against the one built-in key
+	tooMany := len(bottle.DefaultTrustSet().Signers) + 1
+	t.Setenv("ZPKG_TRUST_THRESHOLD", strconv.Itoa(tooMany))
 
 	var out, errb bytes.Buffer
 	code := runBuilds([]string{"fftw.org@3.3.11"}, &out, &errb)

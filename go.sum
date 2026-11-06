@@ -12,8 +12,8 @@ github.com/go-compressions/xz v0.1.0 h1:uBcHmr/IXwk5mNnuOIz4E2rU3aNl9mVOwIQjMgPy
 github.com/go-compressions/xz v0.1.0/go.mod h1:ZbYM2CbKR8SZzq6rqhqlWFnBaXrNhWwQyTSslnYQ0FU=
 github.com/go-test/deep v1.0.3 h1:ZrJSEWsXzPOxaZnFteGEfooLba+ju3FYIbOrS+rQd68=
 github.com/go-test/deep v1.0.3/go.mod h1:wGDj63lr65AM2AQyKZd/NYHGb0R+1RLqB8NKt3aSFNA=
-github.com/go-zpkg/bottle v0.83.0 h1:3hmYmRyfXI8p3QIfu5TZQIyaSV2OdQYetlDX2k5rzT8=
-github.com/go-zpkg/bottle v0.83.0/go.mod h1:V+Yz90wZO//k+jIygs/srDHr5pyBLFfD5Xnl6ShtPbg=
+github.com/go-zpkg/bottle v0.85.0 h1:ViZwf6ZeNbCYNq4PL3mzqSaMQf1/Reg8wqXn/+kwLyo=
+github.com/go-zpkg/bottle v0.85.0/go.mod h1:V+Yz90wZO//k+jIygs/srDHr5pyBLFfD5Xnl6ShtPbg=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/hashicorp/hcl/v2 v2.25.0 h1:HmmQVYRny4MaBo4b20TjmL46wyuUxpnMWkPZ4+NTbWk=
